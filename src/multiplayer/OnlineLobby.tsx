@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { OnlineSession } from './useOnlineGame'
 import { getWsUrl } from './protocol'
+import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../constants'
 
 type OnlineLobbyProps = {
   session: OnlineSession
@@ -174,24 +175,25 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
             {mode === 'create' ? (
               <>
                 <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
-                  Max players
+                  Max players ({MIN_PLAYERS}–{MAX_ONLINE_PLAYERS})
                 </label>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                  {[2, 3, 4].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setPlayerCount(n)}
-                      style={{
-                        ...btnStyle,
-                        background:
-                          playerCount === n ? '#2563eb' : 'rgba(255,255,255,0.1)',
-                      }}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
+                <input
+                  type="number"
+                  min={MIN_PLAYERS}
+                  max={MAX_ONLINE_PLAYERS}
+                  value={playerCount}
+                  onChange={(e) => {
+                    const next = Number(e.target.value)
+                    if (Number.isNaN(next)) return
+                    setPlayerCount(
+                      Math.min(MAX_ONLINE_PLAYERS, Math.max(MIN_PLAYERS, next))
+                    )
+                  }}
+                  style={fieldStyle}
+                />
+                <p style={{ margin: '0 0 16px', fontSize: 12, opacity: 0.75 }}>
+                  Decks scale automatically for larger tables.
+                </p>
                 <button
                   type="button"
                   disabled={!name.trim() || !wsUrl}

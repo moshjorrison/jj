@@ -11,6 +11,7 @@ import {
   createSetupState,
 } from '../src/gameState.js'
 import type { CardPick, GameState } from '../src/types.js'
+import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../src/constants.js'
 import {
   filterGameStateForPlayer,
   sendJson,
@@ -138,7 +139,10 @@ export function handleClientMessage(
   message: ClientMessage
 ) {
   if (message.type === 'create') {
-    const count = Math.min(4, Math.max(2, message.playerCount))
+    const count = Math.min(
+      MAX_ONLINE_PLAYERS,
+      Math.max(MIN_PLAYERS, message.playerCount)
+    )
     const name = message.name.trim() || 'Host'
     const code = makeCode()
 

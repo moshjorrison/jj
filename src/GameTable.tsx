@@ -4,6 +4,7 @@ import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
 import {
   AI_STEP_DELAY_MS,
   HAND_END_DELAY_MS,
+  MAX_LOCAL_PLAYERS,
   ROUND_END_DELAY_MS,
 } from './constants';
 import { useLayout } from './LayoutContext';
@@ -12,7 +13,7 @@ import { useOnlineGame } from './multiplayer/useOnlineGame';
 import { GameOverScreen } from './GameOverScreen';
 import { HotSeatBanner } from './HotSeatBanner';
 import { SetupScreen } from './SetupScreen';
-import { defaultPlayerNames, playerAtDisplay } from './seats';
+import { defaultPlayerNames, opponentsFromView, playerAtDisplay } from './seats';
 import {
   canPlay,
   isFaceDownAvailable,
@@ -562,6 +563,102 @@ function SeatPointsBanner({
       }}
     >
       {winner ? 'Winner' : `+${points}`}
+    </div>
+  );
+}
+
+type RevealFlags = {
+  revealHand: boolean;
+  revealFaceDown: boolean;
+  showPointsBanner: boolean;
+  points: number;
+  isWinner: boolean;
+};
+
+function OpponentStrip({
+  opponents,
+  turnRank,
+  currentPlayerId,
+  getRevealFlags,
+}: {
+  opponents: Player[];
+  turnRank: Rank | null;
+  currentPlayerId: string;
+  getRevealFlags: (player: Player | undefined) => RevealFlags;
+}) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        overflowX: 'auto',
+        paddingBottom: 4,
+        WebkitOverflowScrolling: 'touch',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          gap: 10,
+          justifyContent: 'flex-start',
+          minWidth: 'min-content',
+          padding: '0 4px',
+        }}
+      >
+        {opponents.map((player) => {
+          const reveal = getRevealFlags(player);
+          const isActive = player.id === currentPlayerId;
+
+          return (
+            <div
+              key={player.id}
+              style={{
+                flex: '0 0 auto',
+                padding: '6px 8px',
+                borderRadius: 10,
+                border: isActive
+                  ? '1px solid rgba(251,191,36,0.65)'
+                  : '1px solid rgba(255,255,255,0.12)',
+                background: isActive
+                  ? 'rgba(251,191,36,0.08)'
+                  : 'rgba(255,255,255,0.04)',
+              }}
+            >
+              <SeatBlock player={player}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 6,
+                    position: 'relative',
+                  }}
+                >
+                  <OpponentHand
+                    player={player}
+                    display="top"
+                    revealCards={reveal.revealHand}
+                  />
+                  <TableCards
+                    player={player}
+                    display="top"
+                    isBottom={false}
+                    selectedKeys={new Set()}
+                    turnRank={turnRank}
+                    isPlayerTurn={false}
+                    revealFaceDown={reveal.revealFaceDown}
+                  />
+                  {reveal.showPointsBanner && (
+                    <SeatPointsBanner
+                      points={reveal.points}
+                      winner={reveal.isWinner}
+                    />
+                  )}
+                </div>
+              </SeatBlock>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1261,8 +1358,13 @@ export default function GameTable() {
       (p) => p.score === Math.min(...state.players.map((x) => x.score))
     ).length > 1;
 
-  const showLeft = state.playerCount >= 3;
-  const showRight = state.playerCount === 4;
+  const useExpandedTable = state.playerCount > MAX_LOCAL_PLAYERS;
+  const showLeft = !useExpandedTable && state.playerCount >= 3;
+  const showRight = !useExpandedTable && state.playerCount === 4;
+  const opponents =
+    useExpandedTable && localPlayer
+      ? opponentsFromView(state.players, localPlayer.id)
+      : [];
   const top = playerAtDisplay(
     state.players,
     'top',
@@ -1282,8 +1384,10 @@ export default function GameTable() {
     state.playerCount
   );
   const bottom =
-    playerAtDisplay(state.players, 'bottom', viewSeat, state.playerCount) ??
-    state.players[0]
+    useExpandedTable && localPlayer
+      ? localPlayer
+      : playerAtDisplay(state.players, 'bottom', viewSeat, state.playerCount) ??
+        state.players[0];
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
@@ -1516,6 +1620,14 @@ export default function GameTable() {
                 currentId={state.currentPlayerId}
               />
 
+              {useExpandedTable ? (
+                <OpponentStrip
+                  opponents={opponents}
+                  turnRank={state.turnRank}
+                  currentPlayerId={state.currentPlayerId}
+                  getRevealFlags={getRevealFlags}
+                />
+              ) : (
               <SeatBlock player={top}>
                 {top && (
                   <div
@@ -1550,6 +1662,7 @@ export default function GameTable() {
                   </div>
                 )}
               </SeatBlock>
+              )}
             </div>
 
             {showRight && <div />}

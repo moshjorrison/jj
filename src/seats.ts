@@ -1,15 +1,19 @@
 import type { GameMode, Player, Seat } from './types'
+import { MAX_LOCAL_PLAYERS } from './constants'
 
 export function seatsForPlayerCount(count: number): Seat[] {
   if (count === 2) return ['bottom', 'top']
   if (count === 3) return ['bottom', 'left', 'top']
-  return ['bottom', 'left', 'top', 'right']
+  if (count === 4) return ['bottom', 'left', 'top', 'right']
+  return Array.from({ length: count }, (_, i) =>
+    i === 0 ? 'bottom' : 'top'
+  )
 }
 
 export function defaultPlayerNames(count: number): string[] {
-  if (count === 2) return ['You', 'Player 2']
-  if (count === 3) return ['You', 'Player 2', 'Player 3']
-  return ['You', 'Player 2', 'Player 3', 'Player 4']
+  return Array.from({ length: count }, (_, i) =>
+    i === 0 ? 'You' : `Player ${i + 1}`
+  )
 }
 
 /** Where a seat appears on screen when `viewSeat` is treated as bottom. */
@@ -18,6 +22,10 @@ export function displaySeat(
   viewSeat: Seat,
   playerCount: number
 ): Seat {
+  if (playerCount > MAX_LOCAL_PLAYERS) {
+    return playerSeat
+  }
+
   const active = seatsForPlayerCount(playerCount)
   const viewIdx = active.indexOf(viewSeat)
   const playerIdx = active.indexOf(playerSeat)
@@ -58,7 +66,29 @@ export function playerAtDisplay(
   viewSeat: Seat,
   playerCount: number
 ): Player | undefined {
+  if (playerCount > MAX_LOCAL_PLAYERS) {
+    if (display === 'bottom') {
+      return players.find((p) => p.seat === viewSeat)
+    }
+    return undefined
+  }
+
   return players.find(
     (p) => displaySeat(p.seat, viewSeat, playerCount) === display
   )
+}
+
+/** Opponents in clockwise order from the local player's perspective. */
+export function opponentsFromView(
+  players: Player[],
+  viewPlayerId: string
+): Player[] {
+  const viewIndex = players.findIndex((p) => p.id === viewPlayerId)
+  if (viewIndex < 0) return players.filter((p) => p.id !== viewPlayerId)
+
+  const ordered: Player[] = []
+  for (let i = 1; i < players.length; i++) {
+    ordered.push(players[(viewIndex + i) % players.length])
+  }
+  return ordered
 }

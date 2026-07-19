@@ -30,3 +30,9 @@ export const WIN_SCORE = 200
 export const HAND_SIZE = 11
 export const TABLE_CARDS = 4
 export const FACE_DOWN_CARDS = 4
+
+export const CARDS_PER_PLAYER = 19
+export const CARDS_PER_DECK = 54
+export const MIN_PLAYERS = 2
+export const MAX_LOCAL_PLAYERS = 4
+export const MAX_ONLINE_PLAYERS = 12

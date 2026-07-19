@@ -1,4 +1,9 @@
 import { sortHand } from './gameLogic'
+import {
+  CARDS_PER_DECK,
+  CARDS_PER_PLAYER,
+  MIN_PLAYERS,
+} from './constants'
 import type { Card, Rank, Suit, TableSlot } from './types'
 
 const SUITS: Exclude<Suit, 'joker'>[] = ['hearts', 'diamonds', 'clubs', 'spades']
@@ -67,13 +72,22 @@ function buildStandardDeck(deckId: number, includeJokers: boolean): Card[] {
   return cards
 }
 
-/** Two standard 52-card decks for 2–4 players; 4 players add 2 jokers. */
-/** Two full 54-card decks (including jokers) for all 2–4 player games. */
-export function buildDeck(_playerCount: number): Card[] {
-  return shuffle([
-    ...buildStandardDeck(1, true),
-    ...buildStandardDeck(2, true),
-  ])
+/** Scale decks to fit player count (min 2 decks for 2–4 players). */
+export function deckCountForPlayers(playerCount: number): number {
+  const safeCount = Math.max(MIN_PLAYERS, playerCount)
+  const cardsNeeded = safeCount * CARDS_PER_PLAYER
+  return Math.max(2, Math.ceil(cardsNeeded / CARDS_PER_DECK))
+}
+
+export function buildDeck(playerCount: number): Card[] {
+  const deckCount = deckCountForPlayers(playerCount)
+  const cards: Card[] = []
+
+  for (let deckId = 1; deckId <= deckCount; deckId++) {
+    cards.push(...buildStandardDeck(deckId, true))
+  }
+
+  return shuffle(cards)
 }
 
 export function collectCardsForReshuffle(
@@ -127,7 +141,7 @@ export function dealCards(playerCount: number, existingPool?: Card[]) {
     }
   }
   const sortedHands = hands.map((hand) => sortHand(hand))
-const sideline = deck
+  const sideline = deck
 
-return { hands: sortedHands, faceUps, faceDowns, sideline }
+  return { hands: sortedHands, faceUps, faceDowns, sideline }
 }
