@@ -14,6 +14,7 @@ import type { CardPick, GameState } from '../src/types.js'
 import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../src/constants.js'
 import {
   filterGameStateForPlayer,
+  filterGameStateForRoundEnd,
   sendJson,
   type ClientMessage,
   type LobbyPlayer,
@@ -27,12 +28,20 @@ type Connection = {
   name: string
 }
 
+type RoundEndPending = {
+  displayState: GameState
+  pendingState: GameState
+  message: string
+  continued: Set<string>
+}
+
 type Room = {
   code: string
   hostConnectionId: string
   maxPlayers: number
   connections: Map<string, Connection>
   gameState: GameState | null
+  roundEndPending: RoundEndPending | null
 }
 
 const rooms = new Map<string, Room>()
@@ -108,6 +117,31 @@ function assignPlayerId(room: Room): string | null {
   return null
 }
 
+function seatedPlayerIds(room: Room): string[] {
+  return lobbyPlayers(room).map((p) => p.id)
+}
+
+function broadcastRoundEnd(room: Room) {
+  const pending = room.roundEndPending
+  if (!pending) return
+
+  const continuedIds = [...pending.continued]
+  for (const conn of room.connections.values()) {
+    if (!conn.playerId) continue
+    const msg: ServerMessage = {
+      type: 'roundEnd',
+      displayState: filterGameStateForRoundEnd(
+        pending.displayState,
+        conn.playerId
+      ),
+      pendingState: filterGameStateForPlayer(pending.pendingState, conn.playerId),
+      message: pending.message,
+      continuedIds,
+    }
+    sendJson(conn.ws, msg)
+  }
+}
+
 function applyRoundEnd(room: Room, message: string) {
   if (!room.gameState) return
   const round = checkRoundEnd(room.gameState)
@@ -115,8 +149,33 @@ function applyRoundEnd(room: Room, message: string) {
     broadcastGame(room, message)
     return
   }
-  room.gameState = round.state
-  broadcastGame(room, round.message)
+
+  room.roundEndPending = {
+    displayState: room.gameState,
+    pendingState: round.state,
+    message: round.message,
+    continued: new Set(),
+  }
+  room.gameState = room.roundEndPending.displayState
+  broadcastRoundEnd(room)
+}
+
+function handleContinueRound(room: Room, playerId: string) {
+  const pending = room.roundEndPending
+  if (!pending) return
+
+  pending.continued.add(playerId)
+  const required = seatedPlayerIds(room)
+  const allReady = required.every((id) => pending.continued.has(id))
+
+  if (allReady) {
+    room.gameState = pending.pendingState
+    room.roundEndPending = null
+    broadcastGame(room, pending.message)
+    return
+  }
+
+  broadcastRoundEnd(room)
 }
 
 function handlePlayAction(
@@ -152,6 +211,7 @@ export function handleClientMessage(
       maxPlayers: count,
       connections: new Map(),
       gameState: createSetupState(count, 'online'),
+      roundEndPending: null,
     }
 
     const conn: Connection = {
@@ -209,9 +269,19 @@ export function handleClientMessage(
     return
   }
 
+  if (room.roundEndPending) {
+    if (message.type === 'continueRound') {
+      handleContinueRound(room, conn.playerId)
+      return
+    }
+    sendError(ws, 'Finish reviewing the round before continuing.')
+    return
+  }
+
   if (!room.gameState || room.gameState.phase !== 'playing') {
     if (message.type === 'newGame') {
       room.gameState = null
+      room.roundEndPending = null
       broadcastLobby(room)
       return
     }
@@ -265,6 +335,7 @@ export function handleClientMessage(
 
   if (message.type === 'newGame') {
     room.gameState = null
+    room.roundEndPending = null
     broadcastLobby(room)
   }
 }

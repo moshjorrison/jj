@@ -36,8 +36,19 @@ export type OnlineSession = {
   sendOverplay: (pick: CardPick) => void
   sendTiebreaker: () => void
   sendNewGame: () => void
+  sendContinueRound: () => void
   leaveRoom: () => void
+  roundEnd: {
+    displayState: GameState
+    pendingState: GameState
+    message: string
+    continuedIds: string[]
+  } | null
 }
+
+const CONNECT_ATTEMPTS = 15
+const CONNECT_TIMEOUT_MS = 12000
+const CONNECT_RETRY_MS = 4000
 
 function getRoomFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search)
@@ -45,8 +56,38 @@ function getRoomFromUrl(): string | null {
   return room ? room.toUpperCase() : null
 }
 
+function attachSocketHandlers(
+  ws: WebSocket,
+  handlers: {
+    onMessage: (msg: ServerMessage) => void
+    onError: (message: string) => void
+    onOpen: () => void
+    onClose: () => void
+  }
+) {
+  ws.onopen = () => handlers.onOpen()
+
+  ws.onmessage = (event) => {
+    let msg: ServerMessage | null = null
+    try {
+      msg = JSON.parse(event.data as string) as ServerMessage
+    } catch {
+      return
+    }
+    if (!msg?.type) return
+    handlers.onMessage(msg)
+  }
+
+  ws.onclose = () => handlers.onClose()
+  ws.onerror = () => {
+    // Browsers fire error before close; retry logic handles failure.
+  }
+}
+
 export function useOnlineGame(): OnlineSession {
   const wsRef = useRef<WebSocket | null>(null)
+  const connectGenRef = useRef(0)
+  const pendingMessagesRef = useRef<ClientMessage[]>([])
   const [status, setStatus] = useState<OnlineStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [roomCode, setRoomCode] = useState<string | null>(getRoomFromUrl())
@@ -57,10 +98,66 @@ export function useOnlineGame(): OnlineSession {
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [message, setMessage] = useState('')
   const [wsReady, setWsReady] = useState(false)
+  const [roundEnd, setRoundEnd] = useState<OnlineSession['roundEnd']>(null)
 
   const isHost = !!myPlayerId && myPlayerId === hostId
 
-  const ensureSocket = useCallback(() => {
+  const handleServerMessage = useCallback((msg: ServerMessage) => {
+    if (msg.type === 'error') {
+      setError(msg.message)
+      return
+    }
+
+    if (msg.type === 'lobby') {
+      setRoomCode(msg.code)
+      setPlayers(msg.players)
+      setHostId(msg.hostId)
+      setMaxPlayers(msg.maxPlayers)
+      setMyPlayerId(msg.yourPlayerId)
+      setGameState(null)
+      setStatus('lobby')
+      setError(null)
+
+      const params = new URLSearchParams(window.location.search)
+      params.set('room', msg.code)
+      const next = `${window.location.pathname}?${params.toString()}`
+      window.history.replaceState({}, '', next)
+      return
+    }
+
+    if (msg.type === 'game') {
+      setGameState(msg.state)
+      setMessage(msg.message)
+      setRoundEnd(null)
+      setStatus(msg.state.phase === 'finished' ? 'finished' : 'playing')
+      setError(null)
+      return
+    }
+
+    if (msg.type === 'roundEnd') {
+      setRoundEnd({
+        displayState: msg.displayState,
+        pendingState: msg.pendingState,
+        message: msg.message,
+        continuedIds: msg.continuedIds,
+      })
+      setGameState(msg.displayState)
+      setMessage(msg.message)
+      setStatus('playing')
+      setError(null)
+    }
+  }, [])
+
+  const flushPendingMessages = useCallback((ws: WebSocket) => {
+    if (ws.readyState !== WebSocket.OPEN) return
+    const queue = [...pendingMessagesRef.current]
+    pendingMessagesRef.current = []
+    for (const msg of queue) {
+      ws.send(JSON.stringify(msg))
+    }
+  }, [])
+
+  const connectSocket = useCallback(async (): Promise<WebSocket | null> => {
     const url = getWsUrl()
     if (!url) {
       setStatus('error')
@@ -70,97 +167,111 @@ export function useOnlineGame(): OnlineSession {
       return null
     }
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       return wsRef.current
     }
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) {
       return wsRef.current
     }
 
+    const generation = ++connectGenRef.current
     setStatus('connecting')
     setError(null)
 
-    const ws = new WebSocket(url)
-    wsRef.current = ws
+    for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt++) {
+      if (generation !== connectGenRef.current) return null
 
-    ws.onopen = () => {
-      setWsReady(true)
-      setStatus((prev) => (prev === 'connecting' ? 'idle' : prev))
-    }
+      setError(
+        attempt === 1
+          ? 'Connecting to game server… (free tier may take up to a minute if idle)'
+          : `Still connecting… attempt ${attempt} of ${CONNECT_ATTEMPTS}`
+      )
 
-    ws.onmessage = (event) => {
-      let msg: ServerMessage | null = null
-      try {
-        msg = JSON.parse(event.data as string) as ServerMessage
-      } catch {
-        return
-      }
+      const connected = await new Promise<WebSocket | null>((resolve) => {
+        const ws = new WebSocket(url)
+        let settled = false
 
-      if (!msg?.type) return
+        const timer = window.setTimeout(() => {
+          if (settled) return
+          settled = true
+          ws.close()
+          resolve(null)
+        }, CONNECT_TIMEOUT_MS)
 
-      if (msg.type === 'error') {
-        setError(msg.message)
-        return
-      }
+        ws.onopen = () => {
+          if (settled) return
+          settled = true
+          window.clearTimeout(timer)
+          resolve(ws)
+        }
 
-      if (msg.type === 'lobby') {
-        setRoomCode(msg.code)
-        setPlayers(msg.players)
-        setHostId(msg.hostId)
-        setMaxPlayers(msg.maxPlayers)
-        setMyPlayerId(msg.yourPlayerId)
-        setGameState(null)
-        setStatus('lobby')
+        ws.onclose = () => {
+          if (settled) return
+          settled = true
+          window.clearTimeout(timer)
+          resolve(null)
+        }
+
+        ws.onerror = () => {}
+      })
+
+      if (connected) {
+        wsRef.current = connected
+        setWsReady(true)
         setError(null)
+        setStatus((prev) =>
+          prev === 'connecting' || prev === 'error' ? 'idle' : prev
+        )
 
-        const params = new URLSearchParams(window.location.search)
-        params.set('room', msg.code)
-        const next = `${window.location.pathname}?${params.toString()}`
-        window.history.replaceState({}, '', next)
-        return
+        attachSocketHandlers(connected, {
+          onOpen: () => {},
+          onMessage: handleServerMessage,
+          onError: () => {},
+          onClose: () => {
+            setWsReady(false)
+            wsRef.current = null
+          },
+        })
+
+        flushPendingMessages(connected)
+        return connected
       }
 
-      if (msg.type === 'game') {
-        setGameState(msg.state)
-        setMessage(msg.message)
-        setStatus(msg.state.phase === 'finished' ? 'finished' : 'playing')
-        setError(null)
+      if (attempt < CONNECT_ATTEMPTS) {
+        await new Promise((r) => window.setTimeout(r, CONNECT_RETRY_MS))
       }
     }
 
-    ws.onclose = () => {
-      setWsReady(false)
-      wsRef.current = null
-    }
-
-    ws.onerror = () => {
-      setStatus('error')
-      setError('Could not connect to the game server.')
-    }
-
-    return ws
-  }, [])
-
-  const send = useCallback((msg: ClientMessage) => {
-    const ws = ensureSocket()
-    if (!ws) return
-
-    const post = () => ws.send(JSON.stringify(msg))
-
-    if (ws.readyState === WebSocket.OPEN) {
-      post()
-      return
-    }
-
-    ws.addEventListener(
-      'open',
-      () => {
-        post()
-      },
-      { once: true }
+    setStatus('error')
+    setError(
+      'Could not connect to the game server. Wait a minute and try again — the free server sleeps when idle.'
     )
-  }, [ensureSocket])
+    return null
+  }, [flushPendingMessages, handleServerMessage])
+
+  const send = useCallback(
+    (msg: ClientMessage) => {
+      const post = (ws: WebSocket) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(msg))
+        } else {
+          pendingMessagesRef.current.push(msg)
+        }
+      }
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        post(wsRef.current)
+        return
+      }
+
+      pendingMessagesRef.current.push(msg)
+      void connectSocket().then((ws) => {
+        if (ws) flushPendingMessages(ws)
+      })
+    },
+    [connectSocket, flushPendingMessages]
+  )
 
   const createRoom = useCallback(
     (playerCount: number, name: string) => {
@@ -215,9 +326,15 @@ export function useOnlineGame(): OnlineSession {
     setStatus('lobby')
   }, [send])
 
+  const sendContinueRound = useCallback(() => {
+    send({ type: 'continueRound' })
+  }, [send])
+
   const leaveRoom = useCallback(() => {
+    connectGenRef.current += 1
     wsRef.current?.close()
     wsRef.current = null
+    pendingMessagesRef.current = []
     setStatus('idle')
     setRoomCode(null)
     setPlayers([])
@@ -226,6 +343,8 @@ export function useOnlineGame(): OnlineSession {
     setGameState(null)
     setMessage('')
     setWsReady(false)
+    setError(null)
+    setRoundEnd(null)
 
     const params = new URLSearchParams(window.location.search)
     params.delete('room')
@@ -238,6 +357,7 @@ export function useOnlineGame(): OnlineSession {
 
   useEffect(() => {
     return () => {
+      connectGenRef.current += 1
       wsRef.current?.close()
     }
   }, [])
@@ -263,6 +383,8 @@ export function useOnlineGame(): OnlineSession {
     sendOverplay,
     sendTiebreaker,
     sendNewGame,
+    sendContinueRound,
     leaveRoom,
+    roundEnd,
   }
 }

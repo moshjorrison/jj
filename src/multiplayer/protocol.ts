@@ -1,4 +1,4 @@
-import type { CardPick, GameState } from '../types'
+import type { Card, CardPick, GameState } from '../types'
 import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../constants'
 
 export type LobbyPlayer = {
@@ -17,6 +17,7 @@ export type ClientMessage =
   | { type: 'overplay'; pick: CardPick }
   | { type: 'tiebreaker' }
   | { type: 'newGame' }
+  | { type: 'continueRound' }
 
 export type ServerMessage =
   | {
@@ -32,13 +33,23 @@ export type ServerMessage =
       state: GameState
       message: string
     }
+  | {
+      type: 'roundEnd'
+      displayState: GameState
+      pendingState: GameState
+      message: string
+      continuedIds: string[]
+    }
   | { type: 'error'; message: string }
 
 export function getWsUrl(): string {
   const configured = import.meta.env.VITE_WS_URL as string | undefined
-  if (configured) return configured
-  if (import.meta.env.DEV) return 'ws://localhost:3001'
-  return ''
+  let url = configured?.trim() ?? ''
+  if (!url && import.meta.env.DEV) url = 'ws://localhost:3001'
+  if (!url) return ''
+  if (url.startsWith('https://')) url = `wss://${url.slice('https://'.length)}`
+  if (url.startsWith('http://')) url = `ws://${url.slice('http://'.length)}`
+  return url.replace(/\/$/, '')
 }
 
 const HIDDEN_CARD: Card = {
@@ -71,6 +82,20 @@ export function filterGameStateForPlayer(
         ),
       }
     }),
+  }
+}
+
+/** At round end, show every player's leftover cards for scoring. */
+export function filterGameStateForRoundEnd(
+  state: GameState,
+  viewerId: string
+): GameState {
+  return {
+    ...state,
+    players: state.players.map((player) => ({
+      ...player,
+      name: player.id === viewerId ? 'You' : player.name,
+    })),
   }
 }
 

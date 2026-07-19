@@ -3,9 +3,16 @@ import { runAiStep } from './ai';
 import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
 import {
   AI_STEP_DELAY_MS,
+  FLIP_REVEAL_JACK_MS,
+  FLIP_REVEAL_MS,
   HAND_END_DELAY_MS,
   MAX_LOCAL_PLAYERS,
   ROUND_END_DELAY_MS,
+  ROUND_REVEAL_BANNER_OFFSET_MS,
+  ROUND_REVEAL_FACE_DOWN_OFFSET_MS,
+  ROUND_REVEAL_HAND_OFFSET_MS,
+  ROUND_REVEAL_PLAYER_STEP_MS,
+  ROUND_REVEAL_START_MS,
 } from './constants';
 import { useLayout } from './LayoutContext';
 import { OnlineLobby } from './multiplayer/OnlineLobby';
@@ -75,8 +82,25 @@ type RoundRevealState = {
   roundMessage: string;
   winnerId: string | null;
   players: RoundRevealPlayerState[];
-  readyToContinue: boolean;
+  revealComplete: boolean;
+  continuedPlayerIds: string[];
+  requiredPlayerIds: string[];
 };
+
+function flipRevealDelayMs(card: Card): number {
+  if (card.rank === 'J' || card.rank === 'Joker') return FLIP_REVEAL_JACK_MS;
+  return FLIP_REVEAL_MS;
+}
+
+function requiredContinuePlayerIds(
+  players: Player[],
+  mode: GameMode
+): string[] {
+  if (mode === 'ai') {
+    return players.filter((p) => p.isHuman).map((p) => p.id);
+  }
+  return players.map((p) => p.id);
+}
 
 function displayName(player: Player) {
   return player.id === 'player-0' ? 'You' : player.name;
@@ -682,6 +706,7 @@ export default function GameTable() {
   const [flyingCards, setFlyingCards] = useState<FlyingCard[]>([]);
   const [pendingState, setPendingState] = useState<GameState | null>(null);
   const [roundReveal, setRoundReveal] = useState<RoundRevealState | null>(null);
+  const [flipPreview, setFlipPreview] = useState<Card | null>(null);
 
   const boardRef = useRef<HTMLDivElement | null>(null);
   const pileAreaRef = useRef<HTMLDivElement | null>(null);
@@ -714,7 +739,10 @@ export default function GameTable() {
     state.phase === 'playing';
 
   const isAnimating =
-    flyingCards.length > 0 || pendingState !== null || roundReveal !== null;
+    flyingCards.length > 0 ||
+    pendingState !== null ||
+    roundReveal !== null ||
+    flipPreview !== null;
 
   const getSeatRef = useCallback((seat: Seat) => {
     if (seat === 'bottom') return bottomAreaRef;
@@ -768,30 +796,43 @@ export default function GameTable() {
   );
 
   const startRoundRevealSequence = useCallback(
-    (roundState: GameState, roundMessage: string) => {
+    (
+      displayState: GameState,
+      pendingFinalState: GameState,
+      roundMessage: string,
+      initialContinued: string[] = [],
+      requiredIds?: string[]
+    ) => {
       const winner =
-        roundState.players.find(
+        displayState.players.find(
           (p) =>
             p.hand.length === 0 &&
             p.faceUp.every((c) => !c) &&
             p.faceDown.every((c) => !c)
         ) ?? null;
 
+      const requiredPlayerIds =
+        requiredIds ??
+        requiredContinuePlayerIds(displayState.players, displayState.gameMode);
+
       const initial: RoundRevealState = {
-        pendingFinalState: roundState,
+        pendingFinalState,
         roundMessage: normalizeMessage(roundMessage),
         winnerId: winner?.id ?? null,
-        players: roundState.players.map((p) => ({
+        players: displayState.players.map((p) => ({
           playerId: p.id,
           revealedHand: p.id === winner?.id,
           revealedFaceDown: p.id === winner?.id,
           showPointsBanner: p.id === winner?.id,
           points: p.id === winner?.id ? 0 : roundPenaltyPoints(p),
         })),
-        readyToContinue: false,
+        revealComplete: false,
+        continuedPlayerIds: [...initialContinued],
+        requiredPlayerIds,
       };
 
       setRoundReveal(initial);
+      setState(displayState);
       setSelectedKeys(new Set());
       setPendingState(null);
       setMessage(normalizeMessage(roundMessage));
@@ -799,9 +840,12 @@ export default function GameTable() {
       roundRevealTimersRef.current.forEach((t) => window.clearTimeout(t));
       roundRevealTimersRef.current = [];
 
-      const losers = roundState.players.filter((p) => p.id !== winner?.id);
+      const losers = displayState.players.filter((p) => p.id !== winner?.id);
+      const step = ROUND_REVEAL_PLAYER_STEP_MS;
 
       losers.forEach((player, index) => {
+        const base = ROUND_REVEAL_START_MS + index * step;
+
         const handTimer = window.setTimeout(() => {
           setRoundReveal((current) =>
             current
@@ -815,7 +859,7 @@ export default function GameTable() {
                 }
               : current
           );
-        }, 500 + index * 850);
+        }, base + ROUND_REVEAL_HAND_OFFSET_MS);
 
         const faceDownTimer = window.setTimeout(() => {
           setRoundReveal((current) =>
@@ -830,7 +874,7 @@ export default function GameTable() {
                 }
               : current
           );
-        }, 980 + index * 850);
+        }, base + ROUND_REVEAL_FACE_DOWN_OFFSET_MS);
 
         const bannerTimer = window.setTimeout(() => {
           setRoundReveal((current) =>
@@ -845,18 +889,18 @@ export default function GameTable() {
                 }
               : current
           );
-        }, 1420 + index * 850);
+        }, base + ROUND_REVEAL_BANNER_OFFSET_MS);
 
         roundRevealTimersRef.current.push(handTimer, faceDownTimer, bannerTimer);
       });
 
-      const readyTimer = window.setTimeout(() => {
+      const revealDoneTimer = window.setTimeout(() => {
         setRoundReveal((current) =>
-          current ? { ...current, readyToContinue: true } : current
+          current ? { ...current, revealComplete: true } : current
         );
-      }, 1700 + losers.length * 850);
+      }, ROUND_REVEAL_START_MS + losers.length * step + ROUND_REVEAL_BANNER_OFFSET_MS + 600);
 
-      roundRevealTimersRef.current.push(readyTimer);
+      roundRevealTimersRef.current.push(revealDoneTimer);
     },
     []
   );
@@ -866,7 +910,13 @@ export default function GameTable() {
       const round = checkRoundEnd(result.state);
 
       if (round) {
-        startRoundRevealSequence(round.state, round.message);
+        startRoundRevealSequence(
+          result.state,
+          round.state,
+          round.message,
+          [],
+          requiredContinuePlayerIds(result.state.players, mode)
+        );
         return;
       }
 
@@ -886,7 +936,7 @@ export default function GameTable() {
         showEventBannerFromMessage(result.message);
       }
     },
-    [showPileBanner, showEventBannerFromMessage, startRoundRevealSequence]
+    [showPileBanner, showEventBannerFromMessage, startRoundRevealSequence, mode]
   );
 
   const applyResult = useCallback(
@@ -897,60 +947,91 @@ export default function GameTable() {
     [finalizeResolvedResult]
   );
 
+  const onlineRoundEndKeyRef = useRef<string | null>(null);
+  const prevOnlinePileRef = useRef<Card[]>([]);
+
   const animateResolvedResult = useCallback(
-    (cards: Card[], fromSeat: Seat, result: PlayLikeResult) => {
+    (
+      cards: Card[],
+      fromSeat: Seat,
+      result: PlayLikeResult,
+      revealFlipCard?: Card | null
+    ) => {
       const boardRect = boardRef.current?.getBoundingClientRect();
       const pileRect = pileAreaRef.current?.getBoundingClientRect();
       const fromRect = getSeatRef(fromSeat).current?.getBoundingClientRect();
 
-      if (!boardRect || !pileRect || !fromRect || cards.length === 0) {
-        finalizeResolvedResult(result);
+      const runFlyAnimation = () => {
+        if (!boardRect || !pileRect || !fromRect || cards.length === 0) {
+          finalizeResolvedResult(result);
+          return;
+        }
+
+        const startCenterX = fromRect.left - boardRect.left + fromRect.width / 2;
+        const startCenterY = fromRect.top - boardRect.top + fromRect.height / 2;
+        const pileCenterX = pileRect.left - boardRect.left + pileRect.width / 2;
+        const pileCenterY = pileRect.top - boardRect.top + pileRect.height / 2;
+
+        const count = cards.length;
+        const fanSpacing = 10;
+        const staggerMs = 40;
+        const durationMs = 360;
+        const startRotation = seatRotation(fromSeat);
+
+        const overlayCards: FlyingCard[] = cards.map((card, index) => {
+          const centeredOffset = (index - (count - 1) / 2) * fanSpacing;
+          return {
+            id: `${card.rank}-${card.suit}-${card.deckId}-${card.jokerColor ?? 'n'}-${index}-${Date.now()}`,
+            card,
+            fromX: startCenterX,
+            fromY: startCenterY,
+            toX: pileCenterX + centeredOffset,
+            toY: pileCenterY + Math.abs(centeredOffset) * 0.2,
+            startRotation,
+            endRotation: 0,
+            width: fromSeat === 'bottom' ? layout.cardWidth : layout.opponentCardWidth,
+            height: fromSeat === 'bottom' ? layout.cardHeight : layout.opponentCardHeight,
+            delayMs: index * staggerMs,
+            durationMs,
+          };
+        });
+
+        setPendingState(result.state);
+        setSelectedKeys(new Set());
+        setFlyingCards(overlayCards);
+
+        const totalMs = durationMs + (count - 1) * staggerMs + 30;
+
+        if (animationTimerRef.current) {
+          window.clearTimeout(animationTimerRef.current);
+        }
+
+        animationTimerRef.current = window.setTimeout(() => {
+          setFlyingCards([]);
+          finalizeResolvedResult(result);
+        }, totalMs);
+      };
+
+      const flipCard =
+        revealFlipCard ??
+        (result.message.includes('Flipped') || result.badFlip
+          ? cards[0] ?? null
+          : null);
+
+      if (flipCard) {
+        setFlipPreview(flipCard);
+        const delay = flipRevealDelayMs(flipCard);
+        if (animationTimerRef.current) {
+          window.clearTimeout(animationTimerRef.current);
+        }
+        animationTimerRef.current = window.setTimeout(() => {
+          setFlipPreview(null);
+          runFlyAnimation();
+        }, delay);
         return;
       }
 
-      const startCenterX = fromRect.left - boardRect.left + fromRect.width / 2;
-      const startCenterY = fromRect.top - boardRect.top + fromRect.height / 2;
-      const pileCenterX = pileRect.left - boardRect.left + pileRect.width / 2;
-      const pileCenterY = pileRect.top - boardRect.top + pileRect.height / 2;
-
-      const count = cards.length;
-      const fanSpacing = 10;
-      const staggerMs = 40;
-      const durationMs = 360;
-      const startRotation = seatRotation(fromSeat);
-
-      const overlayCards: FlyingCard[] = cards.map((card, index) => {
-        const centeredOffset = (index - (count - 1) / 2) * fanSpacing;
-        return {
-          id: `${card.rank}-${card.suit}-${card.deckId}-${card.jokerColor ?? 'n'}-${index}-${Date.now()}`,
-          card,
-          fromX: startCenterX,
-          fromY: startCenterY,
-          toX: pileCenterX + centeredOffset,
-          toY: pileCenterY + Math.abs(centeredOffset) * 0.2,
-          startRotation,
-          endRotation: 0,
-          width: fromSeat === 'bottom' ? layout.cardWidth : layout.opponentCardWidth,
-          height: fromSeat === 'bottom' ? layout.cardHeight : layout.opponentCardHeight,
-          delayMs: index * staggerMs,
-          durationMs,
-        };
-      });
-
-      setPendingState(result.state);
-      setSelectedKeys(new Set());
-      setFlyingCards(overlayCards);
-
-      const totalMs = durationMs + (count - 1) * staggerMs + 30;
-
-      if (animationTimerRef.current) {
-        window.clearTimeout(animationTimerRef.current);
-      }
-
-      animationTimerRef.current = window.setTimeout(() => {
-        setFlyingCards([]);
-        finalizeResolvedResult(result);
-      }, totalMs);
+      runFlyAnimation();
     },
     [finalizeResolvedResult, getSeatRef, layout]
   );
@@ -974,14 +1055,73 @@ export default function GameTable() {
 
   useEffect(() => {
     if (setupMode !== 'online' || !online.gameState) return;
+    if (online.roundEnd) return;
+
     setState(online.gameState);
     if (online.message) setMessage(normalizeMessage(online.message));
     setSelectedKeys(new Set());
     setFlyingCards([]);
     setPendingState(null);
     setRoundReveal(null);
+    onlineRoundEndKeyRef.current = null;
     setShowOnlineLobby(false);
-  }, [online.gameState, online.message, setupMode]);
+  }, [online.gameState, online.message, online.roundEnd, setupMode]);
+
+  useEffect(() => {
+    if (setupMode !== 'online' || !online.roundEnd) return;
+
+    const rd = online.roundEnd;
+    setState(rd.displayState);
+    setMessage(normalizeMessage(rd.message));
+    setFlyingCards([]);
+    setPendingState(null);
+    setShowOnlineLobby(false);
+
+    const revealKey = rd.message;
+    if (onlineRoundEndKeyRef.current === revealKey) {
+      setRoundReveal((current) =>
+        current
+          ? { ...current, continuedPlayerIds: [...rd.continuedIds] }
+          : current
+      );
+      return;
+    }
+
+    onlineRoundEndKeyRef.current = revealKey;
+    startRoundRevealSequence(
+      rd.displayState,
+      rd.pendingState,
+      rd.message,
+      rd.continuedIds,
+      rd.displayState.players.map((p) => p.id)
+    );
+  }, [online.roundEnd, setupMode, startRoundRevealSequence]);
+
+  useEffect(() => {
+    if (mode !== 'online' || roundReveal) {
+      prevOnlinePileRef.current = state.activePile;
+      return;
+    }
+
+    const msg = online.message ?? '';
+    const isFlipMsg = msg.includes('Flipped') || msg.includes('Bad flip');
+    if (!isFlipMsg) {
+      prevOnlinePileRef.current = state.activePile;
+      return;
+    }
+
+    const added = cardsAddedToPile(prevOnlinePileRef.current, state.activePile);
+    prevOnlinePileRef.current = state.activePile;
+    if (added.length === 0) return;
+
+    const flipCard = added[0];
+    setFlipPreview(flipCard);
+    const timer = window.setTimeout(
+      () => setFlipPreview(null),
+      flipRevealDelayMs(flipCard)
+    );
+    return () => window.clearTimeout(timer);
+  }, [mode, online.message, state.activePile, roundReveal]);
 
   useEffect(() => {
     if (state.phase !== 'playing' || mode !== 'ai' || isAnimating) return;
@@ -1345,10 +1485,35 @@ export default function GameTable() {
   };
 
   const handleContinueAfterRoundReveal = () => {
-    if (!roundReveal?.readyToContinue) return;
-    setState(roundReveal.pendingFinalState);
-    setMessage(roundReveal.roundMessage);
-    setRoundReveal(null);
+    if (!roundReveal?.revealComplete) return;
+
+    if (mode === 'online') {
+      if (!localPlayer) return;
+      if (roundReveal.continuedPlayerIds.includes(localPlayer.id)) return;
+      online.sendContinueRound();
+      return;
+    }
+
+    const nextId = roundReveal.requiredPlayerIds.find(
+      (id) => !roundReveal.continuedPlayerIds.includes(id)
+    );
+    if (!nextId) return;
+
+    const nextContinued = [...roundReveal.continuedPlayerIds, nextId];
+    const allReady = roundReveal.requiredPlayerIds.every((id) =>
+      nextContinued.includes(id)
+    );
+
+    if (allReady) {
+      setState(roundReveal.pendingFinalState);
+      setMessage(roundReveal.roundMessage);
+      setRoundReveal(null);
+      roundRevealTimersRef.current.forEach((t) => window.clearTimeout(t));
+      roundRevealTimersRef.current = [];
+      return;
+    }
+
+    setRoundReveal({ ...roundReveal, continuedPlayerIds: nextContinued });
   };
 
   const tiedAtEnd =
@@ -1428,6 +1593,34 @@ export default function GameTable() {
   const leftReveal = getRevealFlags(left);
   const rightReveal = getRevealFlags(right);
   const bottomReveal = getRevealFlags(bottom);
+
+  const roundContinueCount = roundReveal
+    ? roundReveal.continuedPlayerIds.length
+    : 0;
+  const roundContinueRequired = roundReveal?.requiredPlayerIds.length ?? 0;
+  const nextContinuePlayerId = roundReveal?.requiredPlayerIds.find(
+    (id) => !roundReveal.continuedPlayerIds.includes(id)
+  );
+  const nextContinuePlayer = nextContinuePlayerId
+    ? state.players.find((p) => p.id === nextContinuePlayerId)
+    : null;
+  const localHasContinued =
+    !!localPlayer &&
+    !!roundReveal?.continuedPlayerIds.includes(localPlayer.id);
+  const canPressContinue =
+    !!roundReveal?.revealComplete &&
+    (mode === 'online'
+      ? !!localPlayer && !localHasContinued
+      : !!nextContinuePlayerId);
+  const continueButtonLabel = !roundReveal?.revealComplete
+    ? 'Reviewing cards…'
+    : mode === 'online'
+      ? localHasContinued
+        ? `Waiting ${roundContinueCount}/${roundContinueRequired}`
+        : 'CONTINUE'
+      : nextContinuePlayer
+        ? `${displayName(nextContinuePlayer)} — CONTINUE (${roundContinueCount}/${roundContinueRequired})`
+        : 'CONTINUE';
 
   return (
     <div
@@ -1560,22 +1753,22 @@ export default function GameTable() {
           <button
             type="button"
             onClick={handleNewGame}
-            disabled={isAnimating && !roundReveal?.readyToContinue}
+            disabled={isAnimating && !roundReveal?.revealComplete}
             style={{
               padding: '8px 16px',
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.18)',
               background:
-                isAnimating && !roundReveal?.readyToContinue
+                isAnimating && !roundReveal?.revealComplete
                   ? 'rgba(255,255,255,0.05)'
                   : 'rgba(255,255,255,0.08)',
               color:
-                isAnimating && !roundReveal?.readyToContinue
+                isAnimating && !roundReveal?.revealComplete
                   ? 'rgba(255,255,255,0.45)'
                   : 'white',
               fontWeight: 700,
               cursor:
-                isAnimating && !roundReveal?.readyToContinue
+                isAnimating && !roundReveal?.revealComplete
                   ? 'default'
                   : 'pointer',
             }}
@@ -1728,6 +1921,51 @@ export default function GameTable() {
               >
                 <ActivePile pile={state.activePile} />
 
+                {flipPreview && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 10,
+                      zIndex: 28,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <div
+                      style={{
+                        transform: 'scale(1.15)',
+                        filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.45))',
+                      }}
+                    >
+                      <CardFace
+                        card={flipPreview}
+                        width={layout.cardWidth}
+                        height={layout.cardHeight}
+                      />
+                    </div>
+                    {(flipPreview.rank === 'J' || flipPreview.rank === 'Joker') && (
+                      <div
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: 999,
+                          background: 'rgba(250, 204, 21, 0.95)',
+                          color: '#111827',
+                          fontWeight: 900,
+                          fontSize: 14,
+                          letterSpacing: 0.8,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {flipPreview.rank === 'Joker' ? 'Joker!' : 'Jack!'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {pileBanner && (
                   <div
                     style={{
@@ -1764,15 +2002,15 @@ export default function GameTable() {
               {roundReveal && (
                 <button
                   type="button"
-                  disabled={!roundReveal.readyToContinue}
+                  disabled={!canPressContinue}
                   onClick={handleContinueAfterRoundReveal}
                   style={{
-                    ...btnStyle(roundReveal.readyToContinue),
-                    minWidth: 150,
+                    ...btnStyle(canPressContinue),
+                    minWidth: 220,
                     marginTop: 8,
                   }}
                 >
-                  CONTINUE
+                  {continueButtonLabel}
                 </button>
               )}
             </div>
@@ -1856,7 +2094,22 @@ export default function GameTable() {
                         online.sendFlip(idx);
                         return;
                       }
-                      applyResult(flipFaceDown(state, bottom.id, idx));
+                      const flippedCard = bottom.faceDown[idx];
+                      if (!flippedCard) return;
+                      const result = flipFaceDown(state, bottom.id, idx);
+                      if (!result) return;
+                      const added = cardsAddedToPile(
+                        state.activePile,
+                        result.state.activePile
+                      );
+                      const cardsToAnimate =
+                        added.length > 0 ? added : [flippedCard];
+                      animateResolvedResult(
+                        cardsToAnimate,
+                        bottom.seat,
+                        result,
+                        flippedCard
+                      );
                     }}
                   />
 

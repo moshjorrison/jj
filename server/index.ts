@@ -15,6 +15,6 @@ wss.on('connection', (ws) => {
   handleConnection(ws)
 })
 
-server.listen(port, () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`J&J multiplayer server listening on port ${port}`)
 })

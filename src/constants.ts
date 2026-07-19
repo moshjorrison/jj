@@ -15,6 +15,17 @@ export const AI_STEP_DELAY_MS = 800
 export const HAND_END_DELAY_MS = 1800
 export const ROUND_END_DELAY_MS = 3000
 
+/** Pause to show a flipped face-down card before it flies to the pile. */
+export const FLIP_REVEAL_MS = 1500
+export const FLIP_REVEAL_JACK_MS = 2800
+
+/** Staggered round-end reveal (losers' leftover cards + score banners). */
+export const ROUND_REVEAL_START_MS = 900
+export const ROUND_REVEAL_PLAYER_STEP_MS = 1600
+export const ROUND_REVEAL_HAND_OFFSET_MS = 0
+export const ROUND_REVEAL_FACE_DOWN_OFFSET_MS = 700
+export const ROUND_REVEAL_BANNER_OFFSET_MS = 1400
+
 export const RANK_ORDER: string[] = [
   'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Q', 'K',
 ]

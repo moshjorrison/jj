@@ -118,18 +118,26 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
           </div>
         )}
 
-        {session.error && (
+        {(session.error || session.status === 'connecting') && (
           <div
             style={{
-              background: 'rgba(220,38,38,0.15)',
-              border: '1px solid rgba(248,113,113,0.4)',
+              background:
+                session.status === 'connecting'
+                  ? 'rgba(37,99,235,0.15)'
+                  : 'rgba(220,38,38,0.15)',
+              border:
+                session.status === 'connecting'
+                  ? '1px solid rgba(96,165,250,0.4)'
+                  : '1px solid rgba(248,113,113,0.4)',
               borderRadius: 10,
               padding: 12,
               marginBottom: 16,
               fontSize: 14,
+              lineHeight: 1.5,
             }}
           >
-            {session.error}
+            {session.error ??
+              'Connecting to game server… (free tier may take up to a minute if idle)'}
           </div>
         )}
 
