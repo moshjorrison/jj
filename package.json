@@ -1,8 +1,8 @@
 {
-  "name": "jj-swoop",
+  "name": "jj",
   "private": true,
   "version": "1.0.0",
-  "description": "J&J (SWOOP) — a shedding card game for 2–4 players",
+  "description": "J&J — a shedding card game for 2–4 players",
   "type": "module",
   "scripts": {
     "dev": "vite",

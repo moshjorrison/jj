@@ -1,8 +1,8 @@
-# J&J (SWOOP)
+# J&J
 
 A browser-based implementation of **J&J** — a shedding card game for 2–4 players, built with React and TypeScript.
 
-**[Play online](https://moshjorrison.github.io/J-J/)**
+**[Play online](https://moshjorrison.github.io/jj/)**
 
 ## Features
 
@@ -28,13 +28,13 @@ npm run build
 npm run preview
 ```
 
-Production builds use base path `/J-J/` for GitHub Pages. Change `repoName` in [vite.config.ts](./vite.config.ts) if you rename the repository.
+Production builds use base path `/jj/` for GitHub Pages. Change `repoName` in [vite.config.ts](./vite.config.ts) if you rename the repository.
 
 ## Deploy to GitHub Pages
 
-1. Push this project to the `main` branch of [moshjorrison/J-J](https://github.com/moshjorrison/J-J).
+1. Push this project to the `main` branch of [moshjorrison/jj](https://github.com/moshjorrison/jj).
 2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. Push to `main` (or run the **Deploy to GitHub Pages** workflow manually). The site will be live at `https://moshjorrison.github.io/J-J/`.
+3. Push to `main` (or run the **Deploy to GitHub Pages** workflow manually). The site will be live at `https://moshjorrison.github.io/jj/`.
 
 ## Project structure
 

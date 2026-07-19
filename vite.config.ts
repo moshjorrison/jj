@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// GitHub Pages project site: https://moshjorrison.github.io/J-J/
-const repoName = 'J-J'
+// GitHub Pages project site: https://moshjorrison.github.io/jj/
+const repoName = 'jj'
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],

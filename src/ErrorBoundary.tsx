@@ -11,7 +11,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('SWOOP render error:', error, info)
+    console.error('J&J render error:', error, info)
   }
 
   render() {
