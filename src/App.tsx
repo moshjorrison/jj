@@ -1,11 +1,14 @@
 import './App.css'
 import { ErrorBoundary } from './ErrorBoundary'
+import { LayoutProvider } from './LayoutContext'
 import GameTable from './GameTable'
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <GameTable />
+      <LayoutProvider>
+        <GameTable />
+      </LayoutProvider>
     </ErrorBoundary>
   )
 }

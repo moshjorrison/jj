@@ -2,13 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { runAiStep } from './ai';
 import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
 import {
-  CARD_WIDTH,
-  CARD_HEIGHT,
-  OPPONENT_CARD_WIDTH,
-  OPPONENT_CARD_HEIGHT,
-  OPPONENT_HAND_STEP,
-  RIGHT_HAND_STEP,
+  AI_STEP_DELAY_MS,
+  HAND_END_DELAY_MS,
+  ROUND_END_DELAY_MS,
 } from './constants';
+import { useLayout } from './LayoutContext';
 import { GameOverScreen } from './GameOverScreen';
 import { HotSeatBanner } from './HotSeatBanner';
 import { SetupScreen } from './SetupScreen';
@@ -158,13 +156,14 @@ function OpponentHand({
   display: Seat;
   revealCards?: boolean;
 }) {
+  const layout = useLayout();
   const count = player.hand.length;
   if (count === 0) return null;
 
   const isVertical = display === 'left' || display === 'right';
-  const cardW = OPPONENT_CARD_WIDTH;
-  const cardH = OPPONENT_CARD_HEIGHT;
-  const step = isVertical ? RIGHT_HAND_STEP : OPPONENT_HAND_STEP;
+  const cardW = layout.opponentCardWidth;
+  const cardH = layout.opponentCardHeight;
+  const step = isVertical ? layout.rightHandStep : layout.opponentHandStep;
   const maxSize = 300;
   const actualStep =
     count > 1
@@ -229,8 +228,9 @@ function TableCards({
   isPlayerTurn: boolean;
   revealFaceDown?: boolean;
 }) {
-  const w = isBottom ? CARD_WIDTH : OPPONENT_CARD_WIDTH;
-  const h = isBottom ? CARD_HEIGHT : OPPONENT_CARD_HEIGHT;
+  const layout = useLayout();
+  const w = isBottom ? layout.cardWidth : layout.opponentCardWidth;
+  const h = isBottom ? layout.cardHeight : layout.opponentCardHeight;
   const overlap = 10;
   const isVertical = !isBottom && (display === 'left' || display === 'right');
   const rotation = isBottom ? 0 : cardFaceRotation(display);
@@ -295,6 +295,16 @@ function TableCards({
               >
                 {!hasFaceUp && isBottom && !revealFaceDown ? (
                   <div
+                    onClick={() => {
+                      if (
+                        layout.isTouch &&
+                        isBottom &&
+                        isPlayerTurn &&
+                        isFaceDownAvailable(player, i)
+                      ) {
+                        onFaceDownDoubleClick?.(i);
+                      }
+                    }}
                     onDoubleClick={() => {
                       if (
                         isBottom &&
@@ -369,11 +379,14 @@ function TableCards({
 }
 
 function ActivePile({ pile }: { pile: Card[] }) {
+  const layout = useLayout();
+  const cardW = layout.cardWidth;
+  const cardH = layout.cardHeight;
   const overlap = 10;
-  const maxVisibleWidth = 180;
+  const maxVisibleWidth = layout.isMobile ? 150 : 180;
   const actualOverlap =
     pile.length > 1
-      ? Math.min(overlap, (maxVisibleWidth - CARD_WIDTH) / (pile.length - 1))
+      ? Math.min(overlap, (maxVisibleWidth - cardW) / (pile.length - 1))
       : overlap;
 
   return (
@@ -382,10 +395,10 @@ function ActivePile({ pile }: { pile: Card[] }) {
         position: 'relative',
         width:
           pile.length > 0
-            ? CARD_WIDTH + (pile.length - 1) * actualOverlap
-            : CARD_WIDTH,
+            ? cardW + (pile.length - 1) * actualOverlap
+            : cardW,
         maxWidth: maxVisibleWidth,
-        height: CARD_HEIGHT,
+        height: cardH,
       }}
     >
       {pile.map((card, i) => {
@@ -411,11 +424,11 @@ function ActivePile({ pile }: { pile: Card[] }) {
             <div
               style={{
                 position: 'relative',
-                width: CARD_WIDTH,
-                height: CARD_HEIGHT,
+                width: cardW,
+                height: cardH,
               }}
             >
-              <CardFace card={card} width={CARD_WIDTH} height={CARD_HEIGHT} />
+              <CardFace card={card} width={cardW} height={cardH} />
               <div
                 style={{
                   position: 'absolute',
@@ -438,7 +451,7 @@ function ActivePile({ pile }: { pile: Card[] }) {
       })}
 
       {pile.length === 0 && (
-        <EmptySlot width={CARD_WIDTH} height={CARD_HEIGHT} />
+        <EmptySlot width={cardW} height={cardH} />
       )}
     </div>
   );
@@ -552,6 +565,7 @@ function SeatPointsBanner({
 }
 
 export default function GameTable() {
+  const layout = useLayout();
   const [setupCount, setSetupCount] = useState(4);
   const [setupMode, setSetupMode] = useState<GameMode>('ai');
   const [setupNames, setSetupNames] = useState(() => defaultPlayerNames(4));
@@ -807,8 +821,8 @@ export default function GameTable() {
           toY: pileCenterY + Math.abs(centeredOffset) * 0.2,
           startRotation,
           endRotation: 0,
-          width: fromSeat === 'bottom' ? CARD_WIDTH : OPPONENT_CARD_WIDTH,
-          height: fromSeat === 'bottom' ? CARD_HEIGHT : OPPONENT_CARD_HEIGHT,
+          width: fromSeat === 'bottom' ? layout.cardWidth : layout.opponentCardWidth,
+          height: fromSeat === 'bottom' ? layout.cardHeight : layout.opponentCardHeight,
           delayMs: index * staggerMs,
           durationMs,
         };
@@ -829,7 +843,7 @@ export default function GameTable() {
         finalizeResolvedResult(result);
       }, totalMs);
     },
-    [finalizeResolvedResult, getSeatRef]
+    [finalizeResolvedResult, getSeatRef, layout]
   );
 
   useEffect(() => {
@@ -1127,6 +1141,27 @@ export default function GameTable() {
     ]
   );
 
+  const handleCardTap = useCallback(
+    (pick: CardPick, card: Card) => {
+      if (!localPlayer || !isLocalTurn || isAnimating) return;
+      const key = pickKey(pick);
+      if (layout.isTouch && selectedKeys.has(key)) {
+        handleCardDoubleClick(pick, card);
+      } else {
+        toggleSelect(pick, card);
+      }
+    },
+    [
+      localPlayer,
+      isLocalTurn,
+      isAnimating,
+      layout.isTouch,
+      selectedKeys,
+      handleCardDoubleClick,
+      toggleSelect,
+    ]
+  );
+
   const handleOverplay = () => {
     if (!localPlayer || selectedPicks.length !== 1 || isAnimating) return;
     applyResult(
@@ -1249,7 +1284,8 @@ export default function GameTable() {
         background:
           'radial-gradient(circle at center, #14532d 0%, #0f3d22 65%, #0b2a18 100%)',
         color: 'white',
-        padding: 4,
+        padding:
+          'max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left))',
         fontFamily: 'Inter, system-ui, sans-serif',
         overflowX: 'hidden',
       }}
@@ -1330,7 +1366,7 @@ export default function GameTable() {
         ref={boardRef}
         style={{
           width: '100%',
-          maxWidth: 520,
+          maxWidth: layout.boardMaxWidth,
           margin: '0 auto',
           position: 'relative',
         }}
@@ -1387,9 +1423,11 @@ export default function GameTable() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: showLeft ? '96px 1fr 96px' : '1fr',
+              gridTemplateColumns: showLeft
+                ? `${layout.sideColumnWidth}px 1fr ${layout.sideColumnWidth}px`
+                : '1fr',
               gridTemplateRows: 'auto auto auto auto',
-              gap: 8,
+              gap: layout.isMobile ? 4 : 8,
               alignItems: 'center',
               justifyItems: 'center',
             }}
@@ -1501,11 +1539,11 @@ export default function GameTable() {
                 ref={pileAreaRef}
                 style={{
                   position: 'relative',
-                  minHeight: CARD_HEIGHT + 24,
+                  minHeight: layout.cardHeight + 24,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  minWidth: CARD_WIDTH + 36,
+                  minWidth: layout.cardWidth + 36,
                 }}
               >
                 <ActivePile pile={state.activePile} />
@@ -1622,7 +1660,7 @@ export default function GameTable() {
                       if (isAnimating) return;
                       const card = bottom.faceUp[idx];
                       if (card) {
-                        toggleSelect({ zone: 'faceUp', index: idx }, card);
+                        handleCardTap({ zone: 'faceUp', index: idx }, card);
                       }
                     }}
                     onFaceUpDoubleClick={(idx) => {
@@ -1655,7 +1693,7 @@ export default function GameTable() {
                           style={{
                             display: 'flex',
                             justifyContent: 'center',
-                            gap: 4,
+                            gap: layout.handGap,
                             width: '100%',
                           }}
                         >
@@ -1667,8 +1705,8 @@ export default function GameTable() {
                               <CardFace
                                 key={key}
                                 card={card}
-                                width={CARD_WIDTH}
-                                height={CARD_HEIGHT}
+                                width={layout.cardWidth}
+                                height={layout.cardHeight}
                                 selected={selectedKeys.has(key)}
                                 faded={
                                   !isLocalTurn ||
@@ -1677,7 +1715,7 @@ export default function GameTable() {
                                 }
                                 onClick={() => {
                                   if (isAnimating) return;
-                                  toggleSelect(pick, card);
+                                  handleCardTap(pick, card);
                                 }}
                                 onDoubleClick={() => {
                                   if (isAnimating) return;
@@ -1703,13 +1741,34 @@ export default function GameTable() {
                       style={{
                         display: 'flex',
                         flexDirection: 'row',
-                        gap: 4,
-                        flexWrap: 'nowrap',
+                        gap: layout.isMobile ? 6 : 8,
+                        flexWrap: 'wrap',
                         justifyContent: 'center',
                         alignItems: 'center',
                         marginTop: 8,
+                        width: '100%',
+                        padding: '0 4px',
                       }}
                     >
+                      {selectedPicks.length > 0 && (
+                        <button
+                          type="button"
+                          disabled={isAnimating}
+                          onClick={() => handlePlay()}
+                          style={{
+                            ...btnStyle(!isAnimating),
+                            background: 'rgba(22,163,74,0.9)',
+                            border: '1px solid rgba(255,255,255,0.25)',
+                            minWidth: layout.isMobile ? 100 : 110,
+                            fontWeight: 800,
+                          }}
+                        >
+                          PLAY
+                          {selectedPicks.length > 1
+                            ? ` (${selectedPicks.length})`
+                            : ''}
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={!canOverplaySelected}

@@ -8,7 +8,7 @@ export function HotSeatBanner({ playerName, onDismiss }: HotSeatBannerProps) {
     <div
       style={{
         position: 'fixed',
-        top: 16,
+        top: 'max(16px, env(safe-area-inset-top))',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 90,
