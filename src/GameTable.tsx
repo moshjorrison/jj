@@ -7,6 +7,8 @@ import {
   ROUND_END_DELAY_MS,
 } from './constants';
 import { useLayout } from './LayoutContext';
+import { OnlineLobby } from './multiplayer/OnlineLobby';
+import { useOnlineGame } from './multiplayer/useOnlineGame';
 import { GameOverScreen } from './GameOverScreen';
 import { HotSeatBanner } from './HotSeatBanner';
 import { SetupScreen } from './SetupScreen';
@@ -566,6 +568,10 @@ function SeatPointsBanner({
 
 export default function GameTable() {
   const layout = useLayout();
+  const online = useOnlineGame();
+  const [showOnlineLobby, setShowOnlineLobby] = useState(
+    () => !!new URLSearchParams(window.location.search).get('room')
+  );
   const [setupCount, setSetupCount] = useState(4);
   const [setupMode, setSetupMode] = useState<GameMode>('ai');
   const [setupNames, setSetupNames] = useState(() => defaultPlayerNames(4));
@@ -592,12 +598,18 @@ export default function GameTable() {
   const mode: GameMode = state.gameMode ?? setupMode;
   const currentPlayer = state.players.find((p) => p.id === state.currentPlayerId);
   const localPlayer =
-    mode === 'hotSeat'
-      ? currentPlayer
-      : state.players.find((p) => p.isHuman) ?? state.players[0];
+    mode === 'online'
+      ? state.players.find((p) => p.id === online.myPlayerId)
+      : mode === 'hotSeat'
+        ? currentPlayer
+        : state.players.find((p) => p.isHuman) ?? state.players[0];
 
   const viewSeat: Seat =
-    mode === 'hotSeat' && currentPlayer ? currentPlayer.seat : 'bottom';
+    mode === 'online' && localPlayer
+      ? localPlayer.seat
+      : mode === 'hotSeat' && currentPlayer
+        ? currentPlayer.seat
+        : 'bottom';
 
   const isLocalTurn =
     !!localPlayer &&
@@ -856,6 +868,25 @@ export default function GameTable() {
   }, []);
 
   useEffect(() => {
+    const room = new URLSearchParams(window.location.search).get('room')
+    if (room) {
+      setSetupMode('online')
+      setShowOnlineLobby(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (setupMode !== 'online' || !online.gameState) return;
+    setState(online.gameState);
+    if (online.message) setMessage(normalizeMessage(online.message));
+    setSelectedKeys(new Set());
+    setFlyingCards([]);
+    setPendingState(null);
+    setRoundReveal(null);
+    setShowOnlineLobby(false);
+  }, [online.gameState, online.message, setupMode]);
+
+  useEffect(() => {
     if (state.phase !== 'playing' || mode !== 'ai' || isAnimating) return;
     const current = state.players.find((p) => p.id === state.currentPlayerId);
     if (!current || current.isHuman) return;
@@ -1004,6 +1035,12 @@ export default function GameTable() {
       const picks = picksOverride ?? selectedPicks;
       if (picks.length === 0) return;
 
+      if (mode === 'online') {
+        online.sendPlay(picks);
+        setSelectedKeys(new Set());
+        return;
+      }
+
       const actor = state.players.find((p) => p.id === localPlayer.id);
       if (!actor) return;
 
@@ -1027,6 +1064,8 @@ export default function GameTable() {
       state,
       animateResolvedResult,
       applyResult,
+      mode,
+      online,
     ]
   );
 
@@ -1164,6 +1203,11 @@ export default function GameTable() {
 
   const handleOverplay = () => {
     if (!localPlayer || selectedPicks.length !== 1 || isAnimating) return;
+    if (mode === 'online') {
+      online.sendOverplay(selectedPicks[0]);
+      setSelectedKeys(new Set());
+      return;
+    }
     applyResult(
       playIntentionalOverplay(state, localPlayer.id, selectedPicks[0])
     );
@@ -1188,6 +1232,10 @@ export default function GameTable() {
   };
 
   const handleNewGame = () => {
+    if (mode === 'online') {
+      online.sendNewGame();
+      setShowOnlineLobby(true);
+    }
     setState(createSetupState(setupCount, setupMode, setupNames));
     setMessage('Choose players and start.');
     setSelectedKeys(new Set());
@@ -1336,6 +1384,17 @@ export default function GameTable() {
             syncSetupState(setupCount, setupMode, names);
           }}
           onStart={handleStart}
+          onPlayOnline={() => setShowOnlineLobby(true)}
+        />
+      )}
+
+      {showOnlineLobby && setupMode === 'online' && online.status !== 'playing' && (
+        <OnlineLobby
+          session={online}
+          onBack={() => {
+            setShowOnlineLobby(false);
+            if (!online.roomCode) setSetupMode('ai');
+          }}
         />
       )}
 
@@ -1355,6 +1414,10 @@ export default function GameTable() {
           tied={tiedAtEnd}
           onNewGame={handleNewGame}
           onTiebreaker={() => {
+            if (mode === 'online') {
+              online.sendTiebreaker();
+              return;
+            }
             setState(startTiebreakerRound(state));
             setMessage('Tiebreaker round — lowest score deals first.');
             setSelectedKeys(new Set());
@@ -1383,7 +1446,11 @@ export default function GameTable() {
           <div>
             <div style={{ fontSize: 22, fontWeight: 800 }}>J&amp;J</div>
             <div style={{ fontSize: 12, opacity: 0.7 }}>
-              {mode === 'hotSeat' ? 'Hot-seat' : 'vs AI'}
+              {mode === 'hotSeat'
+                ? 'Hot-seat'
+                : mode === 'online'
+                  ? 'Online'
+                  : 'vs AI'}
             </div>
           </div>
           <button
@@ -1672,6 +1739,10 @@ export default function GameTable() {
                     }}
                     onFaceDownDoubleClick={(idx) => {
                       if (isAnimating) return;
+                      if (mode === 'online') {
+                        online.sendFlip(idx);
+                        return;
+                      }
                       applyResult(flipFaceDown(state, bottom.id, idx));
                     }}
                   />
@@ -1781,6 +1852,11 @@ export default function GameTable() {
                         type="button"
                         disabled={!isLocalTurn || state.turnRank === null || isAnimating}
                         onClick={() => {
+                          if (mode === 'online') {
+                            online.sendEndTurn();
+                            setSelectedKeys(new Set());
+                            return;
+                          }
                           setState(endTurn(state, bottom.id));
                           setMessage('Turn ended.');
                           setSelectedKeys(new Set());

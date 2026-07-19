@@ -42,7 +42,7 @@ export function createPlayers(
     faceUp: Array.from({ length: 4 }, () => undefined),
     faceDown: Array.from({ length: 4 }, () => undefined),
     score: 0,
-    isHuman: gameMode === 'hotSeat' || i === 0,
+    isHuman: gameMode === 'ai' ? i === 0 : true,
   }))
 }
 

@@ -12,6 +12,7 @@ type SetupScreenProps = {
   onGameModeChange: (mode: GameMode) => void
   onPlayerNameChange: (index: number, name: string) => void
   onStart: () => void
+  onPlayOnline?: () => void
 }
 
 const modeBtn = (active: boolean): CSSProperties => ({
@@ -44,6 +45,7 @@ export function SetupScreen({
   onGameModeChange,
   onPlayerNameChange,
   onStart,
+  onPlayOnline,
 }: SetupScreenProps) {
   const [showRules, setShowRules] = useState(false)
   const labels = defaultPlayerNames(playerCount)
@@ -98,6 +100,13 @@ export function SetupScreen({
           >
             HOT-SEAT
           </button>
+          <button
+            type="button"
+            style={modeBtn(gameMode === 'online')}
+            onClick={() => onGameModeChange('online')}
+          >
+            ONLINE
+          </button>
         </div>
 
         <p
@@ -110,7 +119,9 @@ export function SetupScreen({
         >
           {gameMode === 'ai'
             ? 'You sit at the bottom; other seats are AI.'
-            : 'Pass the device each turn. The table rotates so the active player is always at the bottom.'}
+            : gameMode === 'hotSeat'
+              ? 'Pass the device each turn. The table rotates so the active player is always at the bottom.'
+              : 'Play with friends on separate phones or computers. Create a room and share the invite link.'}
         </p>
 
         <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
@@ -158,16 +169,61 @@ export function SetupScreen({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+        {gameMode !== 'online' && (
+          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={onStart}
+              style={{
+                flex: 1,
+                padding: '12px 0',
+                borderRadius: 10,
+                border: 'none',
+                background: '#16a34a',
+                color: 'white',
+                fontWeight: 800,
+                fontSize: 16,
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+              }}
+            >
+              START GAME
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowRules(true)}
+              style={{
+                padding: '12px 16px',
+                borderRadius: 10,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              RULES
+            </button>
+          </div>
+        )}
+
+        {gameMode === 'online' && (
           <button
             type="button"
-            onClick={onStart}
+            onClick={onPlayOnline}
             style={{
-              flex: 1,
+              width: '100%',
+              marginTop: 12,
               padding: '12px 0',
               borderRadius: 10,
               border: 'none',
-              background: '#16a34a',
+              background: '#2563eb',
               color: 'white',
               fontWeight: 800,
               fontSize: 16,
@@ -176,29 +232,9 @@ export function SetupScreen({
               letterSpacing: 0.6,
             }}
           >
-            START GAME
+            Play online
           </button>
-
-          <button
-            type="button"
-            onClick={() => setShowRules(true)}
-            style={{
-              padding: '12px 16px',
-              borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: 'rgba(255,255,255,0.08)',
-              color: 'white',
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: 0.6,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            RULES
-          </button>
-        </div>
+        )}
 
         {showRules && (
           <div
