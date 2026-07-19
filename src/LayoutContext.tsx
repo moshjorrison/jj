@@ -10,18 +10,29 @@ import { computeLayout, type LayoutSizes } from './layout'
 
 const LayoutContext = createContext<LayoutSizes | null>(null)
 
+function getViewportWidth() {
+  return window.visualViewport?.width ?? window.innerWidth
+}
+
 export function LayoutProvider({ children }: { children: ReactNode }) {
-  const [width, setWidth] = useState(
-    () => window.innerWidth
-  )
+  const [width, setWidth] = useState(() => getViewportWidth())
   const [isTouch, setIsTouch] = useState(
     () => window.matchMedia('(pointer: coarse)').matches
   )
 
   useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    const update = () => setWidth(getViewportWidth())
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', update)
+    vv?.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    window.addEventListener('orientationchange', update)
+    return () => {
+      vv?.removeEventListener('resize', update)
+      vv?.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+      window.removeEventListener('orientationchange', update)
+    }
   }, [])
 
   useEffect(() => {

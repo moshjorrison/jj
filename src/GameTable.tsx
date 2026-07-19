@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { gpuLayer, sharpText } from './display';
 import { runAiStep } from './ai';
 import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
 import {
@@ -178,10 +179,12 @@ function OpponentHand({
   player,
   display,
   revealCards = false,
+  spreadCards = false,
 }: {
   player: Player;
   display: Seat;
   revealCards?: boolean;
+  spreadCards?: boolean;
 }) {
   const layout = useLayout();
   const count = player.hand.length;
@@ -191,11 +194,15 @@ function OpponentHand({
   const cardW = layout.opponentCardWidth;
   const cardH = layout.opponentCardHeight;
   const step = isVertical ? layout.rightHandStep : layout.opponentHandStep;
-  const maxSize = 300;
+  const spreadGap = 3;
+  const maxSize = spreadCards ? 2000 : 300;
+  const spreadStep = isVertical ? cardH + spreadGap : cardW + spreadGap;
   const actualStep =
-    count > 1
-      ? Math.min(step, (maxSize - (isVertical ? cardH : cardW)) / (count - 1))
-      : step;
+    spreadCards && count > 0
+      ? spreadStep
+      : count > 1
+        ? Math.min(step, (maxSize - (isVertical ? cardH : cardW)) / (count - 1))
+        : step;
 
   const containerW = isVertical ? cardW : cardW + (count - 1) * actualStep;
   const containerH = isVertical ? cardH + (count - 1) * actualStep : cardH;
@@ -243,6 +250,7 @@ function TableCards({
   turnRank,
   isPlayerTurn,
   revealFaceDown = false,
+  spreadCards = false,
 }: {
   player: Player;
   isBottom: boolean;
@@ -254,11 +262,13 @@ function TableCards({
   turnRank: Rank | null;
   isPlayerTurn: boolean;
   revealFaceDown?: boolean;
+  spreadCards?: boolean;
 }) {
   const layout = useLayout();
   const w = isBottom ? layout.cardWidth : layout.opponentCardWidth;
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight;
-  const overlap = 10;
+  const overlap = spreadCards ? 0 : 10;
+  const slotGap = spreadCards ? 6 : isBottom ? 12 : 8;
   const isVertical = !isBottom && (display === 'left' || display === 'right');
   const rotation = isBottom ? 0 : cardFaceRotation(display);
 
@@ -291,7 +301,7 @@ function TableCards({
       style={{
         display: 'flex',
         flexDirection: isVertical ? 'column' : 'row',
-        gap: isVertical ? 2 : 12,
+        gap: slotGap,
         alignItems: 'center',
         justifyContent: 'center',
       }}
@@ -303,22 +313,54 @@ function TableCards({
         const hasFaceDown = !!faceDownCard;
         const faceUpKey = pickKey({ zone: 'faceUp', index: i });
 
+        const slotWidth =
+          spreadCards && hasFaceUp && hasFaceDown
+            ? isVertical
+              ? w
+              : w * 2 + slotGap
+            : hasFaceUp && hasFaceDown
+              ? containerWidth
+              : w;
+
+        const slotHeight =
+          spreadCards && hasFaceUp && hasFaceDown
+            ? isVertical
+              ? h * 2 + slotGap
+              : h
+            : hasFaceUp && hasFaceDown
+              ? containerHeight
+              : h;
+
+        const slotLayoutStyle = spreadCards
+          ? {
+              display: 'flex' as const,
+              flexDirection: (isVertical ? 'column' : 'row') as 'column' | 'row',
+              gap: slotGap,
+              alignItems: 'center' as const,
+              justifyContent: 'center' as const,
+            }
+          : { position: 'relative' as const };
+
         return (
           <div
             key={i}
             style={{
-              position: 'relative',
-              width: hasFaceUp && hasFaceDown ? containerWidth : w,
-              height: hasFaceUp && hasFaceDown ? containerHeight : h,
+              ...slotLayoutStyle,
+              width: slotWidth,
+              height: slotHeight,
             }}
           >
             {hasFaceDown && (
               <div
-                style={{
-                  position: 'absolute',
-                  ...faceDownOffset,
-                  zIndex: 1,
-                }}
+                style={
+                  spreadCards
+                    ? undefined
+                    : {
+                        position: 'absolute',
+                        ...faceDownOffset,
+                        zIndex: 1,
+                      }
+                }
               >
                 {!hasFaceUp && isBottom && !revealFaceDown ? (
                   <div
@@ -367,11 +409,15 @@ function TableCards({
 
             {hasFaceUp && faceUpCard && (
               <div
-                style={{
-                  position: 'absolute',
-                  ...faceUpOffset,
-                  zIndex: 2,
-                }}
+                style={
+                  spreadCards
+                    ? undefined
+                    : {
+                        position: 'absolute',
+                        ...faceUpOffset,
+                        zIndex: 2,
+                      }
+                }
               >
                 <CardFace
                   card={faceUpCard}
@@ -495,10 +541,12 @@ function ScorePanel({
     <div
       style={{
         background: 'rgba(255,255,255,0.07)',
-        border: '1px solid rgba(255,255,255,0.15)',
+        border: '0.5px solid rgba(255,255,255,0.18)',
         borderRadius: 10,
         padding: '8px 14px',
         minWidth: 110,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
+        ...sharpText,
       }}
     >
       <div
@@ -604,11 +652,13 @@ function OpponentStrip({
   turnRank,
   currentPlayerId,
   getRevealFlags,
+  spreadCards = false,
 }: {
   opponents: Player[];
   turnRank: Rank | null;
   currentPlayerId: string;
   getRevealFlags: (player: Player | undefined) => RevealFlags;
+  spreadCards?: boolean;
 }) {
   return (
     <div
@@ -661,6 +711,7 @@ function OpponentStrip({
                     player={player}
                     display="top"
                     revealCards={reveal.revealHand}
+                    spreadCards={spreadCards && reveal.revealHand}
                   />
                   <TableCards
                     player={player}
@@ -670,6 +721,7 @@ function OpponentStrip({
                     turnRank={turnRank}
                     isPlayerTurn={false}
                     revealFaceDown={reveal.revealFaceDown}
+                    spreadCards={spreadCards && reveal.revealFaceDown}
                   />
                   {reveal.showPointsBanner && (
                     <SeatPointsBanner
@@ -1593,6 +1645,7 @@ export default function GameTable() {
   const leftReveal = getRevealFlags(left);
   const rightReveal = getRevealFlags(right);
   const bottomReveal = getRevealFlags(bottom);
+  const spreadRoundCards = !!roundReveal;
 
   const roundContinueCount = roundReveal
     ? roundReveal.continuedPlayerIds.length
@@ -1624,15 +1677,16 @@ export default function GameTable() {
 
   return (
     <div
+      className="game-felt"
       style={{
         minHeight: '100dvh',
-        background:
-          'radial-gradient(circle at center, #14532d 0%, #0f3d22 65%, #0b2a18 100%)',
         color: 'white',
         padding:
-          'max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left))',
-        fontFamily: 'Inter, system-ui, sans-serif',
+          'max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(max(6px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(6px, env(safe-area-inset-left))',
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
         overflowX: 'hidden',
+        ...sharpText,
       }}
     >
       <style>{`
@@ -1724,6 +1778,7 @@ export default function GameTable() {
 
       <div
         ref={boardRef}
+        className="game-board"
         style={{
           width: '100%',
           maxWidth: layout.boardMaxWidth,
@@ -1736,13 +1791,28 @@ export default function GameTable() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: 6,
-            gap: 6,
+            marginBottom: layout.isMobile ? 8 : 6,
+            gap: 8,
           }}
         >
           <div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>J&amp;J</div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
+            <div
+              style={{
+                fontSize: layout.isMobile ? 24 : 22,
+                fontWeight: 800,
+                letterSpacing: -0.3,
+              }}
+            >
+              J&amp;J
+            </div>
+            <div
+              style={{
+                fontSize: 12,
+                opacity: 0.72,
+                letterSpacing: 0.2,
+                textTransform: 'uppercase',
+              }}
+            >
               {mode === 'hotSeat'
                 ? 'Hot-seat'
                 : mode === 'online'
@@ -1819,6 +1889,7 @@ export default function GameTable() {
                   turnRank={state.turnRank}
                   currentPlayerId={state.currentPlayerId}
                   getRevealFlags={getRevealFlags}
+                  spreadCards={spreadRoundCards}
                 />
               ) : (
               <SeatBlock player={top}>
@@ -1836,6 +1907,7 @@ export default function GameTable() {
                       player={top}
                       display="top"
                       revealCards={topReveal.revealHand}
+                      spreadCards={spreadRoundCards && topReveal.revealHand}
                     />
                     <TableCards
                       player={top}
@@ -1845,6 +1917,7 @@ export default function GameTable() {
                       turnRank={state.turnRank}
                       isPlayerTurn={false}
                       revealFaceDown={topReveal.revealFaceDown}
+                      spreadCards={spreadRoundCards && topReveal.revealFaceDown}
                     />
                     {topReveal.showPointsBanner && (
                       <SeatPointsBanner
@@ -1876,6 +1949,7 @@ export default function GameTable() {
                         player={left}
                         display="left"
                         revealCards={leftReveal.revealHand}
+                        spreadCards={spreadRoundCards && leftReveal.revealHand}
                       />
                       <TableCards
                         player={left}
@@ -1885,6 +1959,7 @@ export default function GameTable() {
                         turnRank={state.turnRank}
                         isPlayerTurn={false}
                         revealFaceDown={leftReveal.revealFaceDown}
+                        spreadCards={spreadRoundCards && leftReveal.revealFaceDown}
                       />
                       {leftReveal.showPointsBanner && (
                         <SeatPointsBanner
@@ -2035,11 +2110,13 @@ export default function GameTable() {
                         turnRank={state.turnRank}
                         isPlayerTurn={false}
                         revealFaceDown={rightReveal.revealFaceDown}
+                        spreadCards={spreadRoundCards && rightReveal.revealFaceDown}
                       />
                       <OpponentHand
                         player={right}
                         display="right"
                         revealCards={rightReveal.revealHand}
+                        spreadCards={spreadRoundCards && rightReveal.revealHand}
                       />
                       {rightReveal.showPointsBanner && (
                         <SeatPointsBanner
@@ -2074,6 +2151,7 @@ export default function GameTable() {
                     turnRank={state.turnRank}
                     isPlayerTurn={isLocalTurn && !isAnimating}
                     revealFaceDown={bottomReveal.revealFaceDown}
+                    spreadCards={spreadRoundCards && bottomReveal.revealFaceDown}
                     onFaceUpClick={(idx) => {
                       if (isAnimating) return;
                       const card = bottom.faceUp[idx];
@@ -2249,12 +2327,14 @@ export default function GameTable() {
         {flyingCards.map((item) => (
           <div
             key={item.id}
+            className="card-surface"
             style={{
               position: 'absolute',
               left: 0,
               top: 0,
               zIndex: 60,
               pointerEvents: 'none',
+              willChange: 'transform, opacity',
               ['--from-x' as string]: `${item.fromX - item.width / 2}px`,
               ['--from-y' as string]: `${item.fromY - item.height / 2}px`,
               ['--to-x' as string]: `${item.toX - item.width / 2}px`,
@@ -2266,6 +2346,7 @@ export default function GameTable() {
               animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
               animationDelay: `${item.delayMs}ms`,
               animationFillMode: 'forwards',
+              ...gpuLayer,
             }}
           >
             <CardFace
@@ -2283,14 +2364,23 @@ export default function GameTable() {
 
 function btnStyle(enabled: boolean): React.CSSProperties {
   return {
-    padding: '10px 16px',
-    borderRadius: 9,
-    border: '1px solid rgba(255,255,255,0.2)',
-    background: enabled ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+    padding: '11px 18px',
+    borderRadius: 10,
+    border: enabled
+      ? '0.5px solid rgba(255,255,255,0.28)'
+      : '0.5px solid rgba(255,255,255,0.12)',
+    background: enabled
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.08) 100%)'
+      : 'rgba(255,255,255,0.05)',
     color: enabled ? 'white' : 'rgba(255,255,255,0.25)',
-    fontWeight: 600,
+    fontWeight: 700,
+    fontSize: 14,
     cursor: enabled ? 'pointer' : 'default',
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
+    boxShadow: enabled
+      ? '0 1px 0 rgba(255,255,255,0.12) inset, 0 4px 14px rgba(0,0,0,0.18)'
+      : 'none',
+    ...sharpText,
   };
 }

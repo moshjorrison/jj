@@ -61,6 +61,8 @@ export function SetupScreen({
         justifyContent: 'center',
         zIndex: 100,
         overflowY: 'auto',
+        WebkitBackdropFilter: 'blur(10px) saturate(1.15)',
+        backdropFilter: 'blur(10px) saturate(1.15)',
         padding:
           'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
       }}
@@ -68,13 +70,16 @@ export function SetupScreen({
       <div
         style={{
           background: '#0f3d22',
-          border: '1px solid rgba(255,255,255,0.2)',
+          border: '0.5px solid rgba(255,255,255,0.22)',
           borderRadius: 16,
           padding: 24,
           maxWidth: 420,
           width: '100%',
           color: 'white',
           position: 'relative',
+          boxShadow:
+            '0 24px 48px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+          WebkitFontSmoothing: 'antialiased',
         }}
       >
         <h1 style={{ margin: '0 0 8px', fontSize: 28 }}>J&amp;J</h1>

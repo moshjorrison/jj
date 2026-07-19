@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { Card, Seat } from './types'
 import { SUIT_SYMBOL } from './constants'
+import { gpuLayer, sharpText } from './display'
 
 export function isRed(card: Card): boolean {
   return (
@@ -54,8 +55,15 @@ type CardFaceProps = {
 }
 
 function cornerFontSize(width: number, height: number, isSmall: boolean) {
-  if (isSmall) return Math.max(8, Math.round(width * 0.22))
+  if (isSmall) return Math.max(7, Math.round(width * 0.26))
   return Math.max(10, Math.round(height * 0.16))
+}
+
+function rankLabel(rank: string, fontSize: number): CSSProperties {
+  if (rank === '10') {
+    return { fontSize: Math.max(6, Math.round(fontSize * 0.72)), letterSpacing: -0.4 }
+  }
+  return { fontSize }
 }
 
 export function CardFace({
@@ -73,14 +81,17 @@ export function CardFace({
   const suitSymbol = SUIT_SYMBOL[card.suit] ?? ''
   const isJokerCard = card.rank === 'Joker'
   const isSmallCard = width <= 34 || height <= 48
+  const isTinyCard = width <= 30 || height <= 42
   const isMediumCard = width <= 52 || height <= 73
+  const cornerOnly = isSmallCard
 
   const style: CSSProperties = {
     width,
     height,
     borderRadius: Math.round(width * 0.1),
-    background: 'linear-gradient(160deg, #ffffff 0%, #f4f4f5 100%)',
-    border: selected ? '2px solid #2563eb' : '1.5px solid #d4d4d8',
+    background:
+      'linear-gradient(165deg, #ffffff 0%, #fafafa 42%, #f0f0f2 100%)',
+    border: selected ? '2px solid #2563eb' : '0.5px solid #c8c8d0',
     boxSizing: 'border-box',
     position: 'relative',
     display: 'flex',
@@ -90,14 +101,16 @@ export function CardFace({
     flexShrink: 0,
     opacity: faded ? 0.45 : 1,
     boxShadow: selected
-      ? '0 0 0 2px rgba(37,99,235,0.4), 0 4px 12px rgba(0,0,0,0.18)'
-      : '0 2px 6px rgba(0,0,0,0.14)',
+      ? '0 0 0 2px rgba(37,99,235,0.4), 0 6px 16px rgba(0,0,0,0.2)'
+      : '0 1px 0 rgba(255,255,255,0.85) inset, 0 3px 10px rgba(0,0,0,0.16)',
     transition: 'box-shadow 0.15s, border-color 0.15s, transform 0.1s',
-    transform: `${selected ? 'translateY(-4px) ' : ''}rotate(${rotation}deg)`,
+    transform: `${selected ? 'translate3d(0,-4px,0) ' : ''}rotate(${rotation}deg) translateZ(0)`,
     transformOrigin: 'center center',
     userSelect: 'none',
     WebkitUserSelect: 'none',
     overflow: 'hidden',
+    ...sharpText,
+    ...gpuLayer,
   }
 
   const centerRankSize = isSmallCard
@@ -128,11 +141,13 @@ export function CardFace({
   }
 
   if (isJokerCard) {
-    const jokerFontSize = isSmallCard
-      ? 8
-      : isMediumCard
-        ? Math.max(11, Math.round(height * 0.23))
-        : Math.max(20, Math.round(height * 0.26))
+    const jokerFontSize = isTinyCard
+      ? 7
+      : isSmallCard
+        ? 8
+        : isMediumCard
+          ? Math.max(11, Math.round(height * 0.23))
+          : Math.max(20, Math.round(height * 0.26))
 
     return (
       <div style={style} onClick={onClick} onDoubleClick={onDoubleClick}>
@@ -144,71 +159,82 @@ export function CardFace({
             justifyContent: 'center',
             color: red ? '#c0392b' : '#1a1a2e',
             textAlign: 'center',
-            padding: isSmallCard ? 2 : 4,
+            padding: isSmallCard ? 1 : 4,
+            fontSize: jokerFontSize,
+            fontWeight: 800,
+            fontFamily: 'Georgia, serif',
+            lineHeight: isSmallCard ? 0.72 : 0.8,
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: jokerFontSize,
-              fontWeight: 800,
-              fontFamily: 'Georgia, serif',
-              lineHeight: 0.8,
-            }}
-          >
-            <span>J</span>
-            <span>O</span>
-            <span>K</span>
-            <span>E</span>
-            <span>R</span>
-          </div>
+          <span>J</span>
+          <span>O</span>
+          <span>K</span>
+          <span>E</span>
+          <span>R</span>
         </div>
       </div>
     )
   }
 
+  const cornerInset = isTinyCard ? 2 : isSmallCard ? 2 : 3
+  const cornerSideInset = isTinyCard ? 2 : isSmallCard ? 3 : 4
+  const suitCornerSize = isTinyCard
+    ? Math.max(6, cornerSize * 0.82)
+    : cornerSize * 0.9
+
   return (
     <div style={style} onClick={onClick} onDoubleClick={onDoubleClick}>
-      <div style={{ ...cornerStyle, top: 3, left: 4 }}>
-        <span>{card.rank}</span>
-        <span style={{ fontSize: cornerSize * 0.9 }}>{suitSymbol}</span>
+      <div
+        style={{
+          ...cornerStyle,
+          top: cornerInset,
+          left: cornerSideInset,
+          gap: isSmallCard ? 0 : 1,
+        }}
+      >
+        <span style={rankLabel(card.rank, cornerSize)}>{card.rank}</span>
+        <span style={{ fontSize: suitCornerSize, lineHeight: 0.9 }}>
+          {suitSymbol}
+        </span>
       </div>
       <div
         style={{
           ...cornerStyle,
-          bottom: 3,
-          right: 4,
+          bottom: cornerInset,
+          right: cornerSideInset,
+          gap: isSmallCard ? 0 : 1,
           transform: 'rotate(180deg)',
         }}
       >
-        <span>{card.rank}</span>
-        <span style={{ fontSize: cornerSize * 0.9 }}>{suitSymbol}</span>
+        <span style={rankLabel(card.rank, cornerSize)}>{card.rank}</span>
+        <span style={{ fontSize: suitCornerSize, lineHeight: 0.9 }}>
+          {suitSymbol}
+        </span>
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: textColor,
-          lineHeight: 1,
-          pointerEvents: 'none',
-        }}
-      >
-        <span
+      {!cornerOnly && (
+        <div
           style={{
-            fontSize: centerRankSize,
-            fontWeight: 800,
-            fontFamily: 'Georgia, serif',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: textColor,
+            lineHeight: 1,
+            pointerEvents: 'none',
           }}
         >
-          {card.rank}
-        </span>
-        <span style={{ fontSize: centerSuitSize }}>{suitSymbol}</span>
-      </div>
+          <span
+            style={{
+              fontSize: centerRankSize,
+              fontWeight: 800,
+              fontFamily: 'Georgia, serif',
+            }}
+          >
+            {card.rank}
+          </span>
+          <span style={{ fontSize: centerSuitSize }}>{suitSymbol}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -224,20 +250,23 @@ export function CardBack({
 }) {
   return (
     <div
+      className="card-surface"
       style={{
         width,
         height,
         borderRadius: Math.round(width * 0.1),
         background:
-          'linear-gradient(145deg, #1e3a5f 0%, #1d4ed8 45%, #1e40af 100%)',
-        border: '1.5px solid #1e3a8a',
+          'linear-gradient(150deg, #1e3a5f 0%, #1d4ed8 42%, #1e3a8a 100%)',
+        border: '0.5px solid #1e3a8a',
         boxSizing: 'border-box',
         flexShrink: 0,
-        boxShadow: '0 2px 6px rgba(0,0,0,0.22)',
+        boxShadow:
+          '0 1px 0 rgba(255,255,255,0.12) inset, 0 3px 10px rgba(0,0,0,0.24)',
         overflow: 'hidden',
         position: 'relative',
-        transform: `rotate(${rotation}deg)`,
+        transform: `rotate(${rotation}deg) translateZ(0)`,
         transformOrigin: 'center center',
+        ...gpuLayer,
       }}
     >
       <div
@@ -281,16 +310,18 @@ export function EmptySlot({
 }) {
   return (
     <div
+      className="card-surface"
       style={{
         width,
         height,
         borderRadius: Math.round(width * 0.1),
-        border: '1.5px dashed rgba(255,255,255,0.28)',
+        border: '0.5px dashed rgba(255,255,255,0.32)',
         boxSizing: 'border-box',
         flexShrink: 0,
-        transform: `rotate(${rotation}deg)`,
+        transform: `rotate(${rotation}deg) translateZ(0)`,
         transformOrigin: 'center center',
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(255,255,255,0.04)',
+        ...gpuLayer,
       }}
     />
   )

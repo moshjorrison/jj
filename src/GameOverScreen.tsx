@@ -28,17 +28,24 @@ export function GameOverScreen({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 100,
+        WebkitBackdropFilter: 'blur(10px) saturate(1.15)',
+        backdropFilter: 'blur(10px) saturate(1.15)',
+        padding:
+          'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
       }}
     >
       <div
         style={{
           background: '#0f3d22',
-          border: '1px solid rgba(255,255,255,0.2)',
+          border: '0.5px solid rgba(255,255,255,0.22)',
           borderRadius: 16,
           padding: 28,
           maxWidth: 440,
           width: '90%',
           color: 'white',
+          boxShadow:
+            '0 24px 48px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)',
+          WebkitFontSmoothing: 'antialiased',
         }}
       >
         <h2 style={{ margin: '0 0 12px' }}>Game over</h2>

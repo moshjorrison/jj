@@ -1,3 +1,5 @@
+import { snapPx } from './display'
+
 export type LayoutSizes = {
   cardWidth: number
   cardHeight: number
@@ -19,22 +21,24 @@ export function computeLayout(
   isTouch: boolean
 ): LayoutSizes {
   const isMobile = viewportWidth < 520
-  const boardMaxWidth = isMobile ? Math.min(viewportWidth - 8, 520) : 520
+  const boardMaxWidth = isMobile
+    ? snapPx(Math.min(viewportWidth - 8, 520))
+    : 520
 
   const scale = isMobile
-    ? Math.min(1, Math.max(0.72, (viewportWidth - 12) / 390))
+    ? Math.min(1.04, Math.max(0.82, (viewportWidth - 8) / 375))
     : 1
 
-  const cardWidth = Math.round(52 * scale)
-  const cardHeight = Math.round(cardWidth * CARD_ASPECT)
-  const opponentCardWidth = Math.round(28 * scale)
-  const opponentCardHeight = Math.round(opponentCardWidth * CARD_ASPECT)
-  const opponentHandStep = Math.max(8, Math.round(12 * scale))
-  const rightHandStep = Math.max(8, Math.round(12 * scale))
+  const cardWidth = snapPx(54 * scale)
+  const cardHeight = snapPx(cardWidth * CARD_ASPECT)
+  const opponentCardWidth = snapPx(30 * scale)
+  const opponentCardHeight = snapPx(opponentCardWidth * CARD_ASPECT)
+  const opponentHandStep = snapPx(Math.max(9, Math.round(13 * scale)))
+  const rightHandStep = snapPx(Math.max(9, Math.round(13 * scale)))
   const sideColumnWidth = isMobile
-    ? Math.max(48, Math.round(72 * scale))
+    ? snapPx(Math.max(52, Math.round(76 * scale)))
     : 96
-  const handGap = isMobile ? 2 : 4
+  const handGap = isMobile ? snapPx(3) : 4
 
   return {
     cardWidth,
