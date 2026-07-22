@@ -48,3 +48,9 @@ export const MIN_PLAYERS = 2
 export const MAX_LOCAL_PLAYERS = 4
 export const MIN_ONLINE_PLAYERS = 4
 export const MAX_ONLINE_PLAYERS = 10
+
+/** Online turn timer — auto-play when time runs out. */
+export const ONLINE_TURN_TIMER_MS = 75_000
+
+/** After disconnect, auto-play if still offline when it's their turn. */
+export const DISCONNECT_AUTO_PLAY_MS = 30_000

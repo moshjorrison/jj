@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import {
+  getStoredPlayerName,
+  setStoredPlayerName,
+} from '../playerStorage'
 import type { OnlineSession } from './useOnlineGame'
-import { getWsUrl } from './protocol'
+import { getWsUrl } from './wsUrl'
 import { MAX_ONLINE_PLAYERS, MIN_ONLINE_PLAYERS } from '../constants'
 
 type OnlineLobbyProps = {
@@ -35,13 +39,46 @@ const btnStyle: CSSProperties = {
   letterSpacing: 0.5,
 }
 
+function ConnectionDot({ connected }: { connected: boolean }) {
+  return (
+    <span
+      title={connected ? 'Connected' : 'Disconnected'}
+      style={{
+        display: 'inline-block',
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        background: connected ? '#4ade80' : '#6b7280',
+        boxShadow: connected ? '0 0 6px rgba(74,222,128,0.6)' : 'none',
+      }}
+    />
+  )
+}
+
+async function shareInvite(url: string, roomCode: string) {
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Join my J&J game',
+        text: `Join room ${roomCode}`,
+        url,
+      })
+      return
+    } catch {
+      // user cancelled or unsupported
+    }
+  }
+  await navigator.clipboard?.writeText(url)
+}
+
 export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
-  const [name, setName] = useState('')
+  const [name, setName] = useState(() => getStoredPlayerName())
   const [joinCode, setJoinCode] = useState(session.roomCode ?? '')
   const [playerCount, setPlayerCount] = useState(4)
   const [mode, setMode] = useState<'create' | 'join'>(
     session.roomCode ? 'join' : 'create'
   )
+  const [shareCopied, setShareCopied] = useState(false)
 
   const wsUrl = getWsUrl()
   const inLobby = session.status === 'lobby'
@@ -53,6 +90,18 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
   const shareUrl = session.roomCode
     ? `${window.location.origin}${window.location.pathname}?room=${session.roomCode}`
     : ''
+
+  const handleNameChange = (value: string) => {
+    setName(value)
+    setStoredPlayerName(value)
+  }
+
+  const handleShare = async () => {
+    if (!shareUrl || !session.roomCode) return
+    await shareInvite(shareUrl, session.roomCode)
+    setShareCopied(true)
+    window.setTimeout(() => setShareCopied(false), 2000)
+  }
 
   return (
     <div
@@ -154,7 +203,7 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
               placeholder="Enter your name"
               style={fieldStyle}
               maxLength={20}
@@ -272,23 +321,40 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
                 {session.roomCode}
               </div>
               {shareUrl && (
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard?.writeText(shareUrl)}
-                  style={{
-                    marginTop: 12,
-                    padding: '8px 14px',
-                    borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: 'white',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    minHeight: 0,
-                  }}
-                >
-                  Copy invite link
-                </button>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => void handleShare()}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'white',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      minHeight: 0,
+                    }}
+                  >
+                    {shareCopied ? 'Copied!' : 'Share invite'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(shareUrl)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'white',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      minHeight: 0,
+                    }}
+                  >
+                    Copy link
+                  </button>
+                </div>
               )}
             </div>
 
@@ -302,17 +368,38 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
+                    alignItems: 'center',
                     padding: '8px 0',
                     borderBottom: '1px solid rgba(255,255,255,0.1)',
+                    gap: 8,
                   }}
                 >
                   <span>
                     {p.name}
                     {p.id === session.hostId ? ' (host)' : ''}
                   </span>
-                  <span style={{ opacity: 0.7 }}>
-                    {p.connected ? '●' : '○'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ConnectionDot connected={p.connected} />
+                    {session.isHost && p.id !== session.hostId && (
+                      <button
+                        type="button"
+                        onClick={() => session.kickPlayer(p.id)}
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                          border: '1px solid rgba(248,113,113,0.4)',
+                          background: 'rgba(220,38,38,0.15)',
+                          color: '#fecaca',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          minHeight: 0,
+                        }}
+                      >
+                        Kick
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -320,13 +407,19 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
             {session.isHost ? (
               <button
                 type="button"
-                disabled={session.players.length < MIN_ONLINE_PLAYERS}
+                disabled={
+                  session.players.length < MIN_ONLINE_PLAYERS ||
+                  session.players.some((p) => !p.connected)
+                }
                 onClick={() => session.startGame()}
                 style={{
                   ...btnStyle,
                   width: '100%',
                   opacity:
-                    session.players.length < MIN_ONLINE_PLAYERS ? 0.5 : 1,
+                    session.players.length < MIN_ONLINE_PLAYERS ||
+                    session.players.some((p) => !p.connected)
+                      ? 0.5
+                      : 1,
                 }}
               >
                 Start game

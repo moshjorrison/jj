@@ -1,5 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { gpuLayer, sharpText } from './display';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { sharpText } from './display';
+import { FlyingCardsOverlay } from './gameTable/FlyingCardsOverlay';
+import { RoundScoreRecap } from './gameTable/RoundScoreRecap';
+import {
+  ActivePile,
+  OpponentHand,
+  OpponentStrip,
+  ScorePanel,
+  SeatBlock,
+  SeatPointsBanner,
+  TableCards,
+} from './gameTable/TableComponents';
+import { TurnTimer } from './gameTable/TurnTimer';
+import type {
+  FlyingCard,
+  PlayLikeResult,
+  RoundRevealState,
+} from './gameTable/types';
+import {
+  cardsAddedToPile,
+  flipFlyDurationMs,
+  requiredContinuePlayerIds,
+  resolveCardsFromPicks,
+  roundPenaltyPoints,
+  seatRotation,
+} from './gameTable/utils';
 import {
   MessageBar,
   PileBannerOverlay,
@@ -9,19 +34,16 @@ import {
   displayPossessive,
   normalizeMessage,
   pileBannerVariant,
-  seatBlockNameStyle,
   turnHandoffMessage,
   type PileBannerVariant,
 } from './gameUi';
 import { runAiStep } from './ai';
-import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
+import { CardFace, cardFaceRotation } from './cardUi';
+import { isSoundMuted, playSound, setSoundMuted } from './sounds';
 import {
-  AI_STEP_DELAY_MS,
   FLIP_FLY_JACK_MS,
   FLIP_FLY_MS,
-  HAND_END_DELAY_MS,
   MAX_LOCAL_PLAYERS,
-  ROUND_END_DELAY_MS,
   ROUND_REVEAL_BANNER_OFFSET_MS,
   ROUND_REVEAL_FACE_DOWN_OFFSET_MS,
   ROUND_REVEAL_HAND_OFFSET_MS,
@@ -35,6 +57,7 @@ import { GameOverScreen } from './GameOverScreen';
 import { HotSeatBanner } from './HotSeatBanner';
 import { SetupScreen } from './SetupScreen';
 import { defaultPlayerNames, opponentsFromView, playerAtDisplay } from './seats';
+import { getStoredPlayerName, setStoredPlayerName } from './playerStorage';
 import {
   canPlay,
   isFaceDownAvailable,
@@ -60,686 +83,9 @@ import type {
   GameMode,
   GameState,
   Player,
-  Rank,
   Seat,
 } from './types';
 
-type PlayLikeResult = {
-  state: GameState;
-  message: string;
-  cleared?: boolean;
-  badFlip?: boolean;
-  blocked?: boolean;
-};
-
-type FlyingCard = {
-  id: string;
-  card: Card;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-  startRotation: number;
-  endRotation: number;
-  width: number;
-  height: number;
-  delayMs: number;
-  durationMs: number;
-};
-
-type RoundRevealPlayerState = {
-  playerId: string;
-  revealedHand: boolean;
-  revealedFaceDown: boolean;
-  showPointsBanner: boolean;
-  points: number;
-};
-
-type RoundRevealState = {
-  pendingFinalState: GameState;
-  roundMessage: string;
-  winnerId: string | null;
-  players: RoundRevealPlayerState[];
-  revealComplete: boolean;
-  continuedPlayerIds: string[];
-  requiredPlayerIds: string[];
-};
-
-function flipFlyDurationMs(card: Card): number {
-  if (card.rank === 'J' || card.rank === 'Joker') return FLIP_FLY_JACK_MS;
-  return FLIP_FLY_MS;
-}
-
-function requiredContinuePlayerIds(
-  players: Player[],
-  mode: GameMode
-): string[] {
-  if (mode === 'ai') {
-    return players.filter((p) => p.isHuman).map((p) => p.id);
-  }
-  return players.map((p) => p.id);
-}
-
-function seatRotation(seat: Seat) {
-  return cardFaceRotation(seat);
-}
-
-function cardMatches(a: Card, b: Card) {
-  return (
-    a.rank === b.rank &&
-    a.suit === b.suit &&
-    a.deckId === b.deckId &&
-    a.jokerColor === b.jokerColor
-  );
-}
-
-function resolveCardsFromPicks(player: Player, picks: CardPick[]): Card[] {
-  return picks
-    .map((pick) => {
-      if (pick.zone === 'hand') return player.hand[pick.index] ?? null;
-      if (pick.zone === 'faceUp') return player.faceUp[pick.index] ?? null;
-      if (pick.zone === 'faceDown') {
-        if (!isFaceDownAvailable(player, pick.index)) return null;
-        return player.faceDown[pick.index] ?? null;
-      }
-      return null;
-    })
-    .filter((card): card is Card => !!card);
-}
-
-function cardsAddedToPile(prev: Card[], next: Card[]) {
-  const remaining = [...prev];
-  const added: Card[] = [];
-
-  for (const card of next) {
-    const matchIndex = remaining.findIndex((c) => cardMatches(c, card));
-    if (matchIndex >= 0) {
-      remaining.splice(matchIndex, 1);
-    } else {
-      added.push(card);
-    }
-  }
-
-  return added;
-}
-
-function roundPenaltyPoints(player: Player) {
-  const allCards = [
-    ...player.hand,
-    ...player.faceUp.filter((c): c is Card => !!c),
-    ...player.faceDown.filter((c): c is Card => !!c),
-  ];
-
-  return allCards.reduce((sum, card) => {
-    if (card.rank === 'Joker') return sum + 50;
-    if (card.rank === 'J') return sum + 50;
-    if (card.rank === 'Q') return sum + 10;
-    if (card.rank === 'K') return sum + 10;
-    if (card.rank === 'A') return sum + 1;
-    return sum + Number(card.rank);
-  }, 0);
-}
-
-function OpponentHand({
-  player,
-  display,
-  revealCards = false,
-  spreadCards = false,
-}: {
-  player: Player;
-  display: Seat;
-  revealCards?: boolean;
-  spreadCards?: boolean;
-}) {
-  const layout = useLayout();
-  const count = player.hand.length;
-  if (count === 0) return null;
-
-  const isVertical = display === 'left' || display === 'right';
-  const cardW = layout.opponentCardWidth;
-  const cardH = layout.opponentCardHeight;
-  const step = isVertical ? layout.rightHandStep : layout.opponentHandStep;
-  const spreadGap = 3;
-  const maxSize = spreadCards ? 2000 : 300;
-  const spreadStep = isVertical ? cardH + spreadGap : cardW + spreadGap;
-  const actualStep =
-    spreadCards && count > 0
-      ? spreadStep
-      : count > 1
-        ? Math.min(step, (maxSize - (isVertical ? cardH : cardW)) / (count - 1))
-        : step;
-
-  const containerW = isVertical ? cardW : cardW + (count - 1) * actualStep;
-  const containerH = isVertical ? cardH + (count - 1) * actualStep : cardH;
-  const rotation = cardFaceRotation(display);
-
-  return (
-    <div
-      style={{ position: 'relative', width: containerW, height: containerH }}
-    >
-      {player.hand.map((card, i) => (
-        <div
-          key={`${card.rank}-${card.suit}-${card.deckId}-${card.jokerColor ?? 'n'}-${i}`}
-          style={{
-            position: 'absolute',
-            ...(isVertical
-              ? { top: i * actualStep, left: 0 }
-              : { left: i * actualStep, top: 0 }),
-            zIndex: i,
-          }}
-        >
-          {revealCards ? (
-            <CardFace
-              card={card}
-              width={cardW}
-              height={cardH}
-              rotation={rotation}
-            />
-          ) : (
-            <CardBack width={cardW} height={cardH} rotation={rotation} />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TableCards({
-  player,
-  isBottom,
-  display,
-  onFaceUpClick,
-  onFaceUpDoubleClick,
-  onFaceDownDoubleClick,
-  selectedKeys,
-  turnRank,
-  isPlayerTurn,
-  revealFaceDown = false,
-  spreadCards = false,
-}: {
-  player: Player;
-  isBottom: boolean;
-  display: Seat;
-  onFaceUpClick?: (idx: number) => void;
-  onFaceUpDoubleClick?: (idx: number) => void;
-  onFaceDownDoubleClick?: (idx: number) => void;
-  selectedKeys: Set<string>;
-  turnRank: Rank | null;
-  isPlayerTurn: boolean;
-  revealFaceDown?: boolean;
-  spreadCards?: boolean;
-}) {
-  const layout = useLayout();
-  const w = isBottom ? layout.cardWidth : layout.opponentCardWidth;
-  const h = isBottom ? layout.cardHeight : layout.opponentCardHeight;
-  const overlap = spreadCards ? 0 : 10;
-  const slotGap = spreadCards ? 6 : isBottom ? 12 : 8;
-  const isVertical = !isBottom && (display === 'left' || display === 'right');
-  const rotation = isBottom ? 0 : cardFaceRotation(display);
-
-  const faceDownOffset =
-    display === 'top'
-      ? { top: overlap, left: 0 }
-      : display === 'left'
-        ? { top: 0, left: overlap }
-        : display === 'right'
-          ? { top: 0, left: 0 }
-          : { top: 0, left: 0 };
-
-  const faceUpOffset =
-    display === 'top'
-      ? { top: 0, left: 0 }
-      : display === 'left'
-        ? { top: 0, left: 0 }
-        : display === 'right'
-          ? { top: 0, left: overlap }
-          : { top: overlap, left: 0 };
-
-  const containerWidth =
-    display === 'left' || display === 'right' ? w + overlap : w;
-
-  const containerHeight =
-    display === 'top' || display === 'bottom' ? h + overlap : h;
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: isVertical ? 'column' : 'row',
-        gap: slotGap,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {Array.from({ length: 4 }).map((_, i) => {
-        const faceUpCard = player.faceUp[i];
-        const faceDownCard = player.faceDown[i];
-        const hasFaceUp = !!faceUpCard;
-        const hasFaceDown = !!faceDownCard;
-        const faceUpKey = pickKey({ zone: 'faceUp', index: i });
-
-        const slotWidth =
-          spreadCards && hasFaceUp && hasFaceDown
-            ? isVertical
-              ? w
-              : w * 2 + slotGap
-            : hasFaceUp && hasFaceDown
-              ? containerWidth
-              : w;
-
-        const slotHeight =
-          spreadCards && hasFaceUp && hasFaceDown
-            ? isVertical
-              ? h * 2 + slotGap
-              : h
-            : hasFaceUp && hasFaceDown
-              ? containerHeight
-              : h;
-
-        const slotLayoutStyle = spreadCards
-          ? {
-              display: 'flex' as const,
-              flexDirection: (isVertical ? 'column' : 'row') as 'column' | 'row',
-              gap: slotGap,
-              alignItems: 'center' as const,
-              justifyContent: 'center' as const,
-            }
-          : { position: 'relative' as const };
-
-        return (
-          <div
-            key={i}
-            style={{
-              ...slotLayoutStyle,
-              width: slotWidth,
-              height: slotHeight,
-            }}
-          >
-            {hasFaceDown && (
-              <div
-                style={
-                  spreadCards
-                    ? undefined
-                    : {
-                        position: 'absolute',
-                        ...faceDownOffset,
-                        zIndex: 1,
-                      }
-                }
-              >
-                {!hasFaceUp && isBottom && !revealFaceDown ? (
-                  <div
-                    onClick={() => {
-                      if (
-                        layout.isTouch &&
-                        isBottom &&
-                        isPlayerTurn &&
-                        isFaceDownAvailable(player, i)
-                      ) {
-                        onFaceDownDoubleClick?.(i);
-                      }
-                    }}
-                    onDoubleClick={() => {
-                      if (
-                        isBottom &&
-                        isPlayerTurn &&
-                        isFaceDownAvailable(player, i)
-                      ) {
-                        onFaceDownDoubleClick?.(i);
-                      }
-                    }}
-                    style={{
-                      cursor:
-                        isBottom &&
-                        isPlayerTurn &&
-                        isFaceDownAvailable(player, i)
-                          ? 'pointer'
-                          : 'default',
-                    }}
-                  >
-                    <CardBack width={w} height={h} rotation={rotation} />
-                  </div>
-                ) : revealFaceDown && faceDownCard ? (
-                  <CardFace
-                    card={faceDownCard}
-                    width={w}
-                    height={h}
-                    rotation={rotation}
-                  />
-                ) : (
-                  <CardBack width={w} height={h} rotation={rotation} />
-                )}
-              </div>
-            )}
-
-            {hasFaceUp && faceUpCard && (
-              <div
-                style={
-                  spreadCards
-                    ? undefined
-                    : {
-                        position: 'absolute',
-                        ...faceUpOffset,
-                        zIndex: 2,
-                      }
-                }
-              >
-                <CardFace
-                  card={faceUpCard}
-                  width={w}
-                  height={h}
-                  rotation={rotation}
-                  onClick={() => onFaceUpClick?.(i)}
-                  onDoubleClick={
-                    isBottom && isPlayerTurn
-                      ? () => onFaceUpDoubleClick?.(i)
-                      : undefined
-                  }
-                  selected={selectedKeys.has(faceUpKey)}
-                  faded={
-                    isBottom
-                      ? !isPlayerTurn ||
-                        (turnRank !== null && faceUpCard.rank !== turnRank)
-                      : false
-                  }
-                />
-              </div>
-            )}
-
-            {!hasFaceUp && !hasFaceDown && (
-              <EmptySlot width={w} height={h} rotation={rotation} />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ActivePile({ pile }: { pile: Card[] }) {
-  const layout = useLayout();
-  const cardW = layout.cardWidth;
-  const cardH = layout.cardHeight;
-  const overlap = 10;
-  const maxVisibleWidth = layout.isMobile ? 150 : 180;
-  const actualOverlap =
-    pile.length > 1
-      ? Math.min(overlap, (maxVisibleWidth - cardW) / (pile.length - 1))
-      : overlap;
-
-  return (
-    <div
-      style={{
-        position: 'relative',
-        width:
-          pile.length > 0
-            ? cardW + (pile.length - 1) * actualOverlap
-            : cardW,
-        maxWidth: maxVisibleWidth,
-        height: cardH,
-      }}
-    >
-      {pile.map((card, i) => {
-        const color =
-          card.rank === 'Joker'
-            ? card.jokerColor === 'red'
-              ? '#dc2626'
-              : '#111827'
-            : card.suit === 'hearts' || card.suit === 'diamonds'
-              ? '#dc2626'
-              : '#111827';
-
-        return (
-          <div
-            key={`${card.rank}-${card.suit}-${card.deckId}-${card.jokerColor ?? 'n'}-${i}`}
-            style={{
-              position: 'absolute',
-              left: i * actualOverlap,
-              top: 0,
-              zIndex: i,
-            }}
-          >
-            <div
-              style={{
-                position: 'relative',
-                width: cardW,
-                height: cardH,
-              }}
-            >
-              <CardFace card={card} width={cardW} height={cardH} />
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 2,
-                  bottom: 2,
-                  fontSize: 12,
-                  lineHeight: 1,
-                  fontWeight: 900,
-                  color,
-                  textShadow: '0 1px 0 rgba(255,255,255,0.85)',
-                  pointerEvents: 'none',
-                  userSelect: 'none',
-                }}
-              >
-                {card.rank}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-
-      {pile.length === 0 && (
-        <EmptySlot width={cardW} height={cardH} />
-      )}
-    </div>
-  );
-}
-
-function ScorePanel({
-  players,
-  currentId,
-}: {
-  players: Player[];
-  currentId: string;
-}) {
-  return (
-    <div
-      style={{
-        background: 'rgba(255,255,255,0.07)',
-        border: '0.5px solid rgba(255,255,255,0.18)',
-        borderRadius: 10,
-        padding: '8px 14px',
-        minWidth: 110,
-        boxShadow: '0 4px 16px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
-        ...sharpText,
-      }}
-    >
-      <div
-        style={{ fontSize: 10, fontWeight: 700, opacity: 0.5, marginBottom: 6 }}
-      >
-        SCORES
-      </div>
-      {players.map((p) => (
-        <div
-          key={p.id}
-          style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}
-        >
-          <span
-            style={{
-              fontSize: 12,
-              color: p.id === currentId ? '#60a5fa' : undefined,
-            }}
-          >
-            {displayName(p)}
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{p.score}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SeatBlock({
-  player,
-  isActiveTurn = false,
-  children,
-}: {
-  player: Player | undefined;
-  isActiveTurn?: boolean;
-  children?: React.ReactNode;
-}) {
-  if (!player) return <div />;
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: player.seat === 'bottom' ? 4 : 6,
-      }}
-    >
-      <div style={seatBlockNameStyle(isActiveTurn)}>{displayName(player)}</div>
-      {children}
-    </div>
-  );
-}
-
-function SeatPointsBanner({
-  points,
-  winner,
-}: {
-  points: number;
-  winner: boolean;
-}) {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)',
-        padding: winner ? '12px 18px' : '14px 22px',
-        borderRadius: 14,
-        background: winner ? 'rgba(21, 128, 61, 0.92)' : 'rgba(0, 0, 0, 0.84)',
-        border: '1px solid rgba(255,255,255,0.16)',
-        color: 'white',
-        fontWeight: 900,
-        fontSize: winner ? 18 : 28,
-        letterSpacing: 0.6,
-        textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
-        zIndex: 40,
-        boxShadow: '0 12px 28px rgba(0,0,0,0.35)',
-        pointerEvents: 'none',
-      }}
-    >
-      {winner ? 'Winner' : `+${points}`}
-    </div>
-  );
-}
-
-type RevealFlags = {
-  revealHand: boolean;
-  revealFaceDown: boolean;
-  showPointsBanner: boolean;
-  points: number;
-  isWinner: boolean;
-};
-
-function OpponentStrip({
-  opponents,
-  turnRank,
-  currentPlayerId,
-  getRevealFlags,
-  spreadCards = false,
-}: {
-  opponents: Player[];
-  turnRank: Rank | null;
-  currentPlayerId: string;
-  getRevealFlags: (player: Player | undefined) => RevealFlags;
-  spreadCards?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        width: '100%',
-        overflowX: 'auto',
-        paddingBottom: 4,
-        WebkitOverflowScrolling: 'touch',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          gap: 10,
-          justifyContent: 'flex-start',
-          minWidth: 'min-content',
-          padding: '0 4px',
-        }}
-      >
-        {opponents.map((player) => {
-          const reveal = getRevealFlags(player);
-          const isActive = player.id === currentPlayerId;
-
-          return (
-            <div
-              key={player.id}
-              style={{
-                flex: '0 0 auto',
-                padding: '6px 8px',
-                borderRadius: 10,
-                border: isActive
-                  ? '1px solid rgba(251,191,36,0.65)'
-                  : '1px solid rgba(255,255,255,0.12)',
-                background: isActive
-                  ? 'rgba(251,191,36,0.08)'
-                  : 'rgba(255,255,255,0.04)',
-              }}
-            >
-              <SeatBlock
-                player={player}
-                isActiveTurn={player.id === currentPlayerId}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 6,
-                    position: 'relative',
-                  }}
-                >
-                  <OpponentHand
-                    player={player}
-                    display="top"
-                    revealCards={reveal.revealHand}
-                    spreadCards={spreadCards && reveal.revealHand}
-                  />
-                  <TableCards
-                    player={player}
-                    display="top"
-                    isBottom={false}
-                    selectedKeys={new Set()}
-                    turnRank={turnRank}
-                    isPlayerTurn={false}
-                    revealFaceDown={reveal.revealFaceDown}
-                    spreadCards={spreadCards && reveal.revealFaceDown}
-                  />
-                  {reveal.showPointsBanner && (
-                    <SeatPointsBanner
-                      points={reveal.points}
-                      winner={reveal.isWinner}
-                    />
-                  )}
-                </div>
-              </SeatBlock>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 export default function GameTable() {
   const layout = useLayout();
@@ -749,7 +95,12 @@ export default function GameTable() {
   );
   const [setupCount, setSetupCount] = useState(4);
   const [setupMode, setSetupMode] = useState<GameMode>('ai');
-  const [setupNames, setSetupNames] = useState(() => defaultPlayerNames(4));
+  const [setupNames, setSetupNames] = useState(() => {
+    const names = defaultPlayerNames(4);
+    const stored = getStoredPlayerName();
+    if (stored) names[0] = stored;
+    return names;
+  });
   const [state, setState] = useState<GameState>(() =>
     createSetupState(4, 'ai', defaultPlayerNames(4))
   );
@@ -763,6 +114,8 @@ export default function GameTable() {
   const [flyingCards, setFlyingCards] = useState<FlyingCard[]>([]);
   const [pendingState, setPendingState] = useState<GameState | null>(null);
   const [roundReveal, setRoundReveal] = useState<RoundRevealState | null>(null);
+  const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted());
+  const prevTurnPlayerRef = useRef<string | null>(null);
 
   const boardRef = useRef<HTMLDivElement | null>(null);
   const pileAreaRef = useRef<HTMLDivElement | null>(null);
@@ -774,6 +127,8 @@ export default function GameTable() {
   const roundRevealTimersRef = useRef<number[]>([]);
 
   const mode: GameMode = state.gameMode ?? setupMode;
+  const disconnectedIds =
+    mode === 'online' ? online.disconnectedPlayerIds : [];
   const currentPlayer = state.players.find((p) => p.id === state.currentPlayerId);
   const localPlayer =
     mode === 'online'
@@ -799,6 +154,14 @@ export default function GameTable() {
     pendingState !== null ||
     roundReveal !== null;
 
+  useEffect(() => {
+    if (state.phase !== 'playing' || roundReveal) return;
+    const id = state.currentPlayerId;
+    if (prevTurnPlayerRef.current === id) return;
+    prevTurnPlayerRef.current = id;
+    if (localPlayer && id === localPlayer.id) playSound('turn');
+  }, [state.currentPlayerId, state.phase, localPlayer, roundReveal]);
+
   const getSeatRef = useCallback((seat: Seat) => {
     if (seat === 'bottom') return bottomAreaRef;
     if (seat === 'top') return topAreaRef;
@@ -823,6 +186,7 @@ export default function GameTable() {
       const upper = normalized.toUpperCase();
 
       if (upper.includes('PICKED UP THE PILE')) {
+        playSound('pickup');
         const match = normalized.match(
           /^(.+?)\s+(overplayed and picked up the pile|picked up the pile)/i
         );
@@ -839,6 +203,7 @@ export default function GameTable() {
       }
 
       if (upper.includes('WON THE ROUND')) {
+        playSound('roundEnd');
         const match = normalized.match(/^(.+?) won the round/i);
         if (match?.[1]) {
           showPileBanner(`${match[1].toUpperCase()} WINS ROUND`, 2200, 'win');
@@ -847,6 +212,7 @@ export default function GameTable() {
       }
 
       if (upper.includes('CLEAR')) {
+        playSound('clear');
         showPileBanner('CLEAR!', 1300, 'clear');
         return;
       }
@@ -857,6 +223,7 @@ export default function GameTable() {
       }
 
       if (upper.includes('FLIPPED')) {
+        playSound('flip');
         showPileBanner('FLIPPED!', 1200, 'flip');
       }
     },
@@ -998,12 +365,16 @@ export default function GameTable() {
 
       if (result.badFlip) {
         showPileBanner('BAD FLIP!', 1300, 'bad');
+        playSound('pickup');
       } else if (result.cleared) {
         showPileBanner('CLEAR!', 1300, 'clear');
+        playSound('clear');
       } else if (/Flipped Joker/i.test(result.message)) {
         showPileBanner('JOKER!', 1300, 'flip');
+        playSound('flip');
       } else if (/Flipped J\b/i.test(result.message)) {
         showPileBanner('JACK!', 1300, 'flip');
+        playSound('flip');
       } else {
         showEventBannerFromMessage(result.message);
       }
@@ -1042,7 +413,9 @@ export default function GameTable() {
           ? cards[0] ?? null
           : null);
       const isFlipPlay = flipCard !== null;
-      const durationMs = isFlipPlay ? flipFlyDurationMs(flipCard) : 360;
+      const durationMs = isFlipPlay
+        ? flipFlyDurationMs(flipCard, FLIP_FLY_MS, FLIP_FLY_JACK_MS)
+        : 360;
 
       setPendingState(result.state);
       setSelectedKeys(new Set());
@@ -1062,7 +435,7 @@ export default function GameTable() {
         const count = cards.length;
         const fanSpacing = 10;
         const staggerMs = isFlipPlay ? 0 : 40;
-        const startRotation = seatRotation(fromSeat);
+        const startRotation = seatRotation(fromSeat, cardFaceRotation);
 
         const overlayCards: FlyingCard[] = cards.map((card, index) => {
           const centeredOffset = (index - (count - 1) / 2) * fanSpacing;
@@ -1463,7 +836,7 @@ export default function GameTable() {
     const next = startGame(setupCount, setupMode, names);
     setState(next);
     const first = next.players[0];
-    setMessage(`${displayPossessive(first)} turn — select cards to play.`);
+    setMessage(`${displayPossessive(first)} turn â€” select cards to play.`);
     setSelectedKeys(new Set());
     setShowPassBanner(setupMode === 'hotSeat');
   };
@@ -1615,13 +988,13 @@ export default function GameTable() {
       ? !!localPlayer && !localHasContinued
       : !!nextContinuePlayerId);
   const continueButtonLabel = !roundReveal?.revealComplete
-    ? 'Reviewing cards…'
+    ? 'Reviewing cardsâ€¦'
     : mode === 'online'
       ? localHasContinued
         ? `Waiting ${roundContinueCount}/${roundContinueRequired}`
         : 'CONTINUE'
       : nextContinuePlayer
-        ? `${displayName(nextContinuePlayer)} — CONTINUE (${roundContinueCount}/${roundContinueRequired})`
+        ? `${displayName(nextContinuePlayer)} â€” CONTINUE (${roundContinueCount}/${roundContinueRequired})`
         : 'CONTINUE';
 
   const actionHint = actionHintForTurn(state, isLocalTurn, !!roundReveal);
@@ -1691,6 +1064,7 @@ export default function GameTable() {
             const names = [...setupNames];
             names[index] = name;
             setSetupNames(names);
+            if (index === 0) setStoredPlayerName(name);
             syncSetupState(setupCount, setupMode, names);
           }}
           onStart={handleStart}
@@ -1729,7 +1103,7 @@ export default function GameTable() {
               return;
             }
             setState(startTiebreakerRound(state));
-            setMessage('Tiebreaker round — lowest score deals first.');
+            setMessage('Tiebreaker round â€” lowest score deals first.');
             setSelectedKeys(new Set());
           }}
         />
@@ -1779,9 +1153,31 @@ export default function GameTable() {
                   : 'vs AI'}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleNewGame}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => {
+                const next = !soundMuted;
+                setSoundMutedState(next);
+                setSoundMuted(next);
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+              aria-label={soundMuted ? 'Unmute sounds' : 'Mute sounds'}
+            >
+              {soundMuted ? '🔇' : '🔊'}
+            </button>
+            <button
+              type="button"
+              onClick={handleNewGame}
             disabled={isAnimating && !roundReveal?.revealComplete}
             style={{
               padding: '8px 16px',
@@ -1803,12 +1199,27 @@ export default function GameTable() {
             }}
           >
             NEW GAME
-          </button>
+            </button>
+          </div>
         </div>
 
         {state.phase === 'playing' && !roundReveal && currentPlayer && (
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 8,
+            }}
+          >
             <TurnChip label={turnChipLabel} isYours={isLocalTurn} />
+            {mode === 'online' && (
+              <TurnTimer
+                deadlineMs={online.turnDeadline}
+                active={!isAnimating}
+              />
+            )}
           </div>
         )}
 
@@ -1845,8 +1256,15 @@ export default function GameTable() {
             >
               <ScorePanel
                 players={roundReveal?.pendingFinalState.players ?? state.players}
-                currentId={state.currentPlayerId}
+                currentId={localPlayer?.id ?? state.currentPlayerId}
+                disconnectedIds={disconnectedIds}
               />
+              {state.lastRoundDeltas && !roundReveal && (
+                <RoundScoreRecap
+                  players={state.players}
+                  deltas={state.lastRoundDeltas}
+                />
+              )}
 
               {useExpandedTable ? (
                 <OpponentStrip
@@ -1855,6 +1273,7 @@ export default function GameTable() {
                   currentPlayerId={state.currentPlayerId}
                   getRevealFlags={getRevealFlags}
                   spreadCards={spreadRoundCards}
+                  disconnectedIds={disconnectedIds}
                 />
               ) : (
               <SeatBlock
@@ -1980,7 +1399,7 @@ export default function GameTable() {
                   message={roundReveal.roundMessage}
                   hint={
                     !roundReveal.revealComplete
-                      ? 'Reviewing leftover cards…'
+                      ? 'Reviewing leftover cardsâ€¦'
                       : 'Everyone must continue before the next deal.'
                   }
                 />
@@ -2263,39 +1682,7 @@ export default function GameTable() {
           </div>
         )}
 
-        {flyingCards.map((item) => (
-          <div
-            key={item.id}
-            className="card-surface"
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              zIndex: 60,
-              pointerEvents: 'none',
-              willChange: 'transform, opacity',
-              ['--from-x' as string]: `${item.fromX - item.width / 2}px`,
-              ['--from-y' as string]: `${item.fromY - item.height / 2}px`,
-              ['--to-x' as string]: `${item.toX - item.width / 2}px`,
-              ['--to-y' as string]: `${item.toY - item.height / 2}px`,
-              ['--from-rot' as string]: `${item.startRotation}deg`,
-              ['--to-rot' as string]: `${item.endRotation}deg`,
-              animationName: 'flying-card-to-pile',
-              animationDuration: `${item.durationMs}ms`,
-              animationTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
-              animationDelay: `${item.delayMs}ms`,
-              animationFillMode: 'forwards',
-              ...gpuLayer,
-            }}
-          >
-            <CardFace
-              card={item.card}
-              width={item.width}
-              height={item.height}
-              rotation={item.startRotation}
-            />
-          </div>
-        ))}
+        <FlyingCardsOverlay cards={flyingCards} />
       </div>
     </div>
   );

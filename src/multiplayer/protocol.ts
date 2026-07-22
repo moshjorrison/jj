@@ -8,7 +8,8 @@ export type LobbyPlayer = {
 
 export type ClientMessage =
   | { type: 'create'; playerCount: number; name: string }
-  | { type: 'join'; code: string; name: string }
+  | { type: 'join'; code: string; name: string; rejoinToken?: string }
+  | { type: 'rejoin'; code: string; token: string }
   | { type: 'start' }
   | { type: 'play'; picks: CardPick[] }
   | { type: 'flip'; index: number }
@@ -18,6 +19,7 @@ export type ClientMessage =
   | { type: 'tiebreaker' }
   | { type: 'newGame' }
   | { type: 'continueRound' }
+  | { type: 'kick'; playerId: string }
 
 export type ServerMessage =
   | {
@@ -27,11 +29,14 @@ export type ServerMessage =
       hostId: string
       maxPlayers: number
       yourPlayerId: string
+      rejoinToken: string
     }
   | {
       type: 'game'
       state: GameState
       message: string
+      turnDeadline?: number
+      disconnectedPlayerIds?: string[]
     }
   | {
       type: 'roundEnd'
@@ -39,18 +44,10 @@ export type ServerMessage =
       pendingState: GameState
       message: string
       continuedIds: string[]
+      turnDeadline?: number
+      disconnectedPlayerIds?: string[]
     }
   | { type: 'error'; message: string }
-
-export function getWsUrl(): string {
-  const configured = import.meta.env.VITE_WS_URL as string | undefined
-  let url = configured?.trim() ?? ''
-  if (!url && import.meta.env.DEV) url = 'ws://localhost:3001'
-  if (!url) return ''
-  if (url.startsWith('https://')) url = `wss://${url.slice('https://'.length)}`
-  if (url.startsWith('http://')) url = `ws://${url.slice('http://'.length)}`
-  return url.replace(/\/$/, '')
-}
 
 const HIDDEN_CARD: Card = {
   rank: '2',

@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CardPick, GameState } from '../types'
 import {
-  getWsUrl,
+  clearStoredRejoin,
+  getStoredRejoin,
+  setStoredRejoin,
+} from '../playerStorage'
+import type { CardPick, GameState } from '../types'
+import { getWsUrl } from './wsUrl'
+import {
   type ClientMessage,
   type LobbyPlayer,
   type ServerMessage,
@@ -23,10 +28,13 @@ export type OnlineSession = {
   hostId: string | null
   maxPlayers: number
   myPlayerId: string | null
+  rejoinToken: string | null
   gameState: GameState | null
   message: string
   isHost: boolean
   wsReady: boolean
+  turnDeadline: number | null
+  disconnectedPlayerIds: string[]
   createRoom: (playerCount: number, name: string) => void
   joinRoom: (code: string, name: string) => void
   startGame: () => void
@@ -38,6 +46,7 @@ export type OnlineSession = {
   sendTiebreaker: () => void
   sendNewGame: () => void
   sendContinueRound: () => void
+  kickPlayer: (playerId: string) => void
   leaveRoom: () => void
   roundEnd: {
     displayState: GameState
@@ -89,6 +98,8 @@ export function useOnlineGame(): OnlineSession {
   const wsRef = useRef<WebSocket | null>(null)
   const connectGenRef = useRef(0)
   const pendingMessagesRef = useRef<ClientMessage[]>([])
+  const rejoinTokenRef = useRef<string | null>(null)
+  const autoRejoinAttemptedRef = useRef(false)
   const [status, setStatus] = useState<OnlineStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [roomCode, setRoomCode] = useState<string | null>(getRoomFromUrl())
@@ -96,9 +107,14 @@ export function useOnlineGame(): OnlineSession {
   const [hostId, setHostId] = useState<string | null>(null)
   const [maxPlayers, setMaxPlayers] = useState(4)
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null)
+  const [rejoinToken, setRejoinToken] = useState<string | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [message, setMessage] = useState('')
   const [wsReady, setWsReady] = useState(false)
+  const [turnDeadline, setTurnDeadline] = useState<number | null>(null)
+  const [disconnectedPlayerIds, setDisconnectedPlayerIds] = useState<string[]>(
+    []
+  )
   const [roundEnd, setRoundEnd] = useState<OnlineSession['roundEnd']>(null)
 
   const isHost = !!myPlayerId && myPlayerId === hostId
@@ -115,8 +131,16 @@ export function useOnlineGame(): OnlineSession {
       setHostId(msg.hostId)
       setMaxPlayers(msg.maxPlayers)
       setMyPlayerId(msg.yourPlayerId)
+      setRejoinToken(msg.rejoinToken)
+      rejoinTokenRef.current = msg.rejoinToken
+      setStoredRejoin(msg.code, {
+        token: msg.rejoinToken,
+        playerId: msg.yourPlayerId,
+      })
       setGameState(null)
       setStatus('lobby')
+      setTurnDeadline(null)
+      setDisconnectedPlayerIds([])
       setError(null)
 
       const params = new URLSearchParams(window.location.search)
@@ -130,6 +154,8 @@ export function useOnlineGame(): OnlineSession {
       setGameState(msg.state)
       setMessage(msg.message)
       setRoundEnd(null)
+      setTurnDeadline(msg.turnDeadline ?? null)
+      setDisconnectedPlayerIds(msg.disconnectedPlayerIds ?? [])
       setStatus(msg.state.phase === 'finished' ? 'finished' : 'playing')
       setError(null)
       return
@@ -144,6 +170,8 @@ export function useOnlineGame(): OnlineSession {
       })
       setGameState(msg.displayState)
       setMessage(msg.message)
+      setTurnDeadline(msg.turnDeadline ?? null)
+      setDisconnectedPlayerIds(msg.disconnectedPlayerIds ?? [])
       setStatus('playing')
       setError(null)
     }
@@ -283,7 +311,13 @@ export function useOnlineGame(): OnlineSession {
 
   const joinRoom = useCallback(
     (code: string, name: string) => {
-      send({ type: 'join', code: code.toUpperCase(), name })
+      const stored = getStoredRejoin(code.toUpperCase())
+      send({
+        type: 'join',
+        code: code.toUpperCase(),
+        name,
+        rejoinToken: stored?.token,
+      })
     },
     [send]
   )
@@ -335,21 +369,34 @@ export function useOnlineGame(): OnlineSession {
     send({ type: 'continueRound' })
   }, [send])
 
+  const kickPlayer = useCallback(
+    (playerId: string) => {
+      send({ type: 'kick', playerId })
+    },
+    [send]
+  )
+
   const leaveRoom = useCallback(() => {
+    if (roomCode) clearStoredRejoin(roomCode)
     connectGenRef.current += 1
     wsRef.current?.close()
     wsRef.current = null
     pendingMessagesRef.current = []
+    rejoinTokenRef.current = null
+    autoRejoinAttemptedRef.current = false
     setStatus('idle')
     setRoomCode(null)
     setPlayers([])
     setHostId(null)
     setMyPlayerId(null)
+    setRejoinToken(null)
     setGameState(null)
     setMessage('')
     setWsReady(false)
     setError(null)
     setRoundEnd(null)
+    setTurnDeadline(null)
+    setDisconnectedPlayerIds([])
 
     const params = new URLSearchParams(window.location.search)
     params.delete('room')
@@ -358,7 +405,23 @@ export function useOnlineGame(): OnlineSession {
       ? `${window.location.pathname}?${qs}`
       : window.location.pathname
     window.history.replaceState({}, '', next)
-  }, [])
+  }, [roomCode])
+
+  useEffect(() => {
+    const code = getRoomFromUrl()
+    if (!code || autoRejoinAttemptedRef.current) return
+
+    const stored = getStoredRejoin(code)
+    if (!stored?.token) return
+
+    autoRejoinAttemptedRef.current = true
+    rejoinTokenRef.current = stored.token
+
+    void connectSocket().then((ws) => {
+      if (!ws) return
+      send({ type: 'rejoin', code, token: stored.token })
+    })
+  }, [connectSocket, send])
 
   useEffect(() => {
     return () => {
@@ -375,10 +438,13 @@ export function useOnlineGame(): OnlineSession {
     hostId,
     maxPlayers,
     myPlayerId,
+    rejoinToken,
     gameState,
     message,
     isHost,
     wsReady,
+    turnDeadline,
+    disconnectedPlayerIds,
     createRoom,
     joinRoom,
     startGame,
@@ -390,6 +456,7 @@ export function useOnlineGame(): OnlineSession {
     sendTiebreaker,
     sendNewGame,
     sendContinueRound,
+    kickPlayer,
     leaveRoom,
     roundEnd,
   }

@@ -344,6 +344,17 @@ export function runAiStep(state: GameState): AiStep | null {
   return runAiTurnOnce(state, current)
 }
 
+/** Auto-play one step for any seated player (online timer / disconnect). */
+export function runAutoPlayForPlayer(
+  state: GameState,
+  playerId: string
+): AiStep | null {
+  if (state.phase !== 'playing') return null
+  const player = state.players.find((p) => p.id === playerId)
+  if (!player) return null
+  return runAiTurnOnce(state, player)
+}
+
 export function runAiTurnToCompletion(
   state: GameState,
   maxSteps = 12

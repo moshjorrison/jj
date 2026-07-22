@@ -12,7 +12,16 @@ import {
   sortHand,
 } from './gameLogic'
 import { createPlayers, orderPlayersFromWinner } from './seats'
-import type { Card, CardPick, GameMode, GameState, Player, Rank } from './types'
+import type {
+  Card,
+  CardPick,
+  GameMode,
+  GameState,
+  Player,
+  Rank,
+  RoundScoreDelta,
+  TurnSource,
+} from './types'
 
 function withDisplayName(player: Player): Player {
   return {
@@ -354,7 +363,7 @@ export function playCards(
           next = updatePlayer(next, playerId, (p) => removePicks(p, extraPicks))
         }
 
-        const clearedState = {
+        const clearedState: GameState = {
           ...next,
           activePile: nextPile,
           turnRank: playRank,
@@ -475,9 +484,15 @@ export function checkRoundEnd(
   const winner = state.players.find((p) => playerHasNoCards(p))
   if (!winner || state.phase !== 'playing') return null
 
-  const updatedPlayers = state.players.map((p) =>
-    p.id === winner.id ? p : { ...p, score: p.score + scoreRemainingCards(p) }
-  )
+  const lastRoundDeltas: RoundScoreDelta[] = state.players.map((p) => ({
+    playerId: p.id,
+    delta: p.id === winner.id ? 0 : scoreRemainingCards(p),
+  }))
+
+  const updatedPlayers = state.players.map((p) => {
+    const delta = lastRoundDeltas.find((d) => d.playerId === p.id)?.delta ?? 0
+    return delta > 0 ? { ...p, score: p.score + delta } : p
+  })
 
   if (updatedPlayers.some((p) => p.score >= WIN_SCORE)) {
     return {
@@ -489,6 +504,7 @@ export function checkRoundEnd(
         turnRank: null,
         turnSource: null,
         formTurnUsed: false,
+        lastRoundDeltas,
       },
       message: `${winner.name} won the round. Game over!`,
     }
@@ -523,6 +539,7 @@ export function checkRoundEnd(
       turnRank: null,
       turnSource: null,
       formTurnUsed: false,
+      lastRoundDeltas,
     },
     message: `${winner.name} won the round. New deal — ${winner.name} goes first.`,
   }

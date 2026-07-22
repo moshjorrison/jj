@@ -38,12 +38,17 @@ export type Player = {
   isHuman: boolean
 }
 
-export type TurnSource = 'hand' | 'faceUp' | 'faceDown'
+export type TurnSource = 'hand' | 'faceUp' | 'faceDown' | 'mixed'
 
 export type GamePhase = 'setup' | 'playing' | 'finished'
 
 /** AI: you vs bots. Hot-seat: pass the device. Online: play across devices. */
 export type GameMode = 'ai' | 'hotSeat' | 'online'
+
+export type RoundScoreDelta = {
+  playerId: string
+  delta: number
+}
 
 export type GameState = {
   players: Player[]
@@ -57,6 +62,8 @@ export type GameState = {
   formTurnUsed: boolean
   turnRank: Rank | null
   turnSource: TurnSource | null
+  /** Points added last round (losers only; winner is 0). */
+  lastRoundDeltas?: RoundScoreDelta[] | null
 }
 
 export type CardPick =

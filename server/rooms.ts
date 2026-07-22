@@ -1,5 +1,12 @@
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
+import { runAutoPlayForPlayer } from '../src/ai.js'
+import {
+  DISCONNECT_AUTO_PLAY_MS,
+  MAX_ONLINE_PLAYERS,
+  MIN_ONLINE_PLAYERS,
+  ONLINE_TURN_TIMER_MS,
+} from '../src/constants.js'
 import {
   checkRoundEnd,
   endTurn,
@@ -13,10 +20,6 @@ import {
 } from '../src/gameState.js'
 import type { CardPick, GameState } from '../src/types.js'
 import {
-  MAX_ONLINE_PLAYERS,
-  MIN_ONLINE_PLAYERS,
-} from '../src/constants.js'
-import {
   filterGameStateForPlayer,
   filterGameStateForRoundEnd,
   sendJson,
@@ -28,8 +31,15 @@ import {
 type Connection = {
   id: string
   ws: WebSocket
-  playerId: string | null
+  playerId: string
+}
+
+type PlayerSeat = {
+  playerId: string
   name: string
+  token: string
+  connectionId: string | null
+  disconnectTimer: ReturnType<typeof setTimeout> | null
 }
 
 type RoundEndPending = {
@@ -41,11 +51,14 @@ type RoundEndPending = {
 
 type Room = {
   code: string
-  hostConnectionId: string
+  hostPlayerId: string
   maxPlayers: number
+  seats: PlayerSeat[]
   connections: Map<string, Connection>
   gameState: GameState | null
   roundEndPending: RoundEndPending | null
+  turnDeadline: number | null
+  turnTimerHandle: ReturnType<typeof setTimeout> | null
 }
 
 const rooms = new Map<string, Room>()
@@ -59,79 +72,138 @@ function makeConnectionId() {
   return randomBytes(8).toString('hex')
 }
 
-function lobbyPlayers(room: Room): LobbyPlayer[] {
-  const ordered = [...room.connections.values()].sort((a, b) => {
-    const ai = a.playerId ? Number(a.playerId.split('-')[1]) : 99
-    const bi = b.playerId ? Number(b.playerId.split('-')[1]) : 99
-    return ai - bi
-  })
+function makeToken() {
+  return randomBytes(16).toString('hex')
+}
 
-  return ordered
-    .filter((c) => c.playerId)
-    .map((c) => ({
-      id: c.playerId!,
-      name: c.name,
-      connected: c.ws.readyState === c.ws.OPEN,
-    }))
+function findSeat(room: Room, playerId: string) {
+  return room.seats.find((s) => s.playerId === playerId)
+}
+
+function disconnectedPlayerIds(room: Room): string[] {
+  return room.seats
+    .filter((s) => !s.connectionId)
+    .map((s) => s.playerId)
+}
+
+function lobbyPlayers(room: Room): LobbyPlayer[] {
+  return room.seats.map((s) => ({
+    id: s.playerId,
+    name: s.name,
+    connected: !!s.connectionId && room.connections.has(s.connectionId),
+  }))
+}
+
+function seatedPlayerIds(room: Room): string[] {
+  return room.seats.map((s) => s.playerId)
+}
+
+function clearDisconnectTimer(seat: PlayerSeat) {
+  if (seat.disconnectTimer) {
+    clearTimeout(seat.disconnectTimer)
+    seat.disconnectTimer = null
+  }
+}
+
+function clearTurnTimer(room: Room) {
+  if (room.turnTimerHandle) {
+    clearTimeout(room.turnTimerHandle)
+    room.turnTimerHandle = null
+  }
+  room.turnDeadline = null
+}
+
+function scheduleTurnTimer(room: Room) {
+  clearTurnTimer(room)
+  if (
+    !room.gameState ||
+    room.gameState.phase !== 'playing' ||
+    room.roundEndPending
+  ) {
+    return
+  }
+
+  room.turnDeadline = Date.now() + ONLINE_TURN_TIMER_MS
+  room.turnTimerHandle = setTimeout(() => {
+    handleAutoPlay(room, 'time')
+  }, ONLINE_TURN_TIMER_MS)
+}
+
+function handleAutoPlay(room: Room, reason: 'time' | 'disconnect') {
+  if (!room.gameState || room.gameState.phase !== 'playing') return
+
+  const playerId = room.gameState.currentPlayerId
+  const seat = findSeat(room, playerId)
+  if (!seat) return
+
+  if (reason === 'disconnect' && seat.connectionId) return
+
+  const step = runAutoPlayForPlayer(room.gameState, playerId)
+  if (!step) return
+
+  room.gameState = step.state
+  const suffix = reason === 'time' ? ' (time)' : ' (away)'
+  applyRoundEnd(room, step.message.replace(/\.$/, '') + suffix + '.')
+  scheduleTurnTimer(room)
+}
+
+function scheduleDisconnectAutoPlay(room: Room, playerId: string) {
+  const seat = findSeat(room, playerId)
+  if (!seat) return
+  clearDisconnectTimer(seat)
+
+  seat.disconnectTimer = setTimeout(() => {
+    if (!room.gameState || room.gameState.currentPlayerId !== playerId) return
+    handleAutoPlay(room, 'disconnect')
+  }, DISCONNECT_AUTO_PLAY_MS)
+}
+
+function lobbyMessage(room: Room, conn: Connection): ServerMessage {
+  const seat = findSeat(room, conn.playerId)!
+  return {
+    type: 'lobby',
+    code: room.code,
+    players: lobbyPlayers(room),
+    hostId: room.hostPlayerId,
+    maxPlayers: room.maxPlayers,
+    yourPlayerId: conn.playerId,
+    rejoinToken: seat.token,
+  }
 }
 
 function broadcastLobby(room: Room) {
   for (const conn of room.connections.values()) {
-    if (!conn.playerId) continue
-    const msg: ServerMessage = {
-      type: 'lobby',
-      code: room.code,
-      players: lobbyPlayers(room),
-      hostId: room.connections.get(room.hostConnectionId)?.playerId ?? 'player-0',
-      maxPlayers: room.maxPlayers,
-      yourPlayerId: conn.playerId,
-    }
-    sendJson(conn.ws, msg)
+    sendJson(conn.ws, lobbyMessage(room, conn))
   }
 }
 
 function broadcastGame(room: Room, message: string) {
   if (!room.gameState) return
+  const disconnected = disconnectedPlayerIds(room)
+
   for (const conn of room.connections.values()) {
-    if (!conn.playerId) continue
     const msg: ServerMessage = {
       type: 'game',
       state: filterGameStateForPlayer(room.gameState, conn.playerId),
       message,
+      turnDeadline: room.turnDeadline ?? undefined,
+      disconnectedPlayerIds: disconnected,
     }
     sendJson(conn.ws, msg)
   }
-}
 
-function sendError(ws: WebSocket, message: string) {
-  sendJson(ws, { type: 'error', message })
-}
-
-function assignPlayerId(room: Room): string | null {
-  const used = new Set(
-    [...room.connections.values()]
-      .map((c) => c.playerId)
-      .filter((id): id is string => !!id)
-  )
-
-  for (let i = 0; i < room.maxPlayers; i++) {
-    const id = `player-${i}`
-    if (!used.has(id)) return id
-  }
-  return null
-}
-
-function seatedPlayerIds(room: Room): string[] {
-  return lobbyPlayers(room).map((p) => p.id)
+  scheduleTurnTimer(room)
 }
 
 function broadcastRoundEnd(room: Room) {
   const pending = room.roundEndPending
   if (!pending) return
 
+  clearTurnTimer(room)
   const continuedIds = [...pending.continued]
+  const disconnected = disconnectedPlayerIds(room)
+
   for (const conn of room.connections.values()) {
-    if (!conn.playerId) continue
     const msg: ServerMessage = {
       type: 'roundEnd',
       displayState: filterGameStateForRoundEnd(
@@ -141,6 +213,7 @@ function broadcastRoundEnd(room: Room) {
       pendingState: filterGameStateForPlayer(pending.pendingState, conn.playerId),
       message: pending.message,
       continuedIds,
+      disconnectedPlayerIds: disconnected,
     }
     sendJson(conn.ws, msg)
   }
@@ -190,15 +263,74 @@ function handlePlayAction(
 ) {
   if (!room.gameState) return
   const result = playCards(room.gameState, playerId, picks)
-  if (!result) {
-    return
-  }
+  if (!result) return
   if (result.blocked) {
     sendError(ws, result.message)
     return
   }
   room.gameState = result.state
   applyRoundEnd(room, result.message)
+}
+
+function assignPlayerId(room: Room): string | null {
+  const used = new Set(room.seats.map((s) => s.playerId))
+  for (let i = 0; i < room.maxPlayers; i++) {
+    const id = `player-${i}`
+    if (!used.has(id)) return id
+  }
+  return null
+}
+
+function attachConnection(
+  room: Room,
+  connectionId: string,
+  ws: WebSocket,
+  seat: PlayerSeat
+) {
+  clearDisconnectTimer(seat)
+  seat.connectionId = connectionId
+  room.connections.set(connectionId, {
+    id: connectionId,
+    ws,
+    playerId: seat.playerId,
+  })
+  connectionRooms.set(connectionId, room.code)
+}
+
+function sendError(ws: WebSocket, message: string) {
+  sendJson(ws, { type: 'error', message })
+}
+
+function handleKick(room: Room, hostConn: Connection, targetPlayerId: string) {
+  if (hostConn.playerId !== room.hostPlayerId) {
+    sendError(hostConn.ws, 'Only the host can kick players.')
+    return
+  }
+
+  if (targetPlayerId === room.hostPlayerId) {
+    sendError(hostConn.ws, 'You cannot kick yourself.')
+    return
+  }
+
+  const seatIndex = room.seats.findIndex((s) => s.playerId === targetPlayerId)
+  if (seatIndex < 0) {
+    sendError(hostConn.ws, 'Player not found.')
+    return
+  }
+
+  const seat = room.seats[seatIndex]!
+  if (seat.connectionId) {
+    const conn = room.connections.get(seat.connectionId)
+    conn?.ws.close()
+  }
+
+  room.seats.splice(seatIndex, 1)
+
+  if (room.gameState?.phase === 'playing') {
+    broadcastGame(room, `${seat.name} was removed from the game.`)
+  } else {
+    broadcastLobby(room)
+  }
 }
 
 export function handleClientMessage(
@@ -213,27 +345,34 @@ export function handleClientMessage(
     )
     const name = message.name.trim() || 'Host'
     const code = makeCode()
+    const hostSeat: PlayerSeat = {
+      playerId: 'player-0',
+      name,
+      token: makeToken(),
+      connectionId: null,
+      disconnectTimer: null,
+    }
 
     const room: Room = {
       code,
-      hostConnectionId: connectionId,
+      hostPlayerId: 'player-0',
       maxPlayers: count,
+      seats: [hostSeat],
       connections: new Map(),
       gameState: createSetupState(count, 'online'),
       roundEndPending: null,
+      turnDeadline: null,
+      turnTimerHandle: null,
     }
 
-    const conn: Connection = {
-      id: connectionId,
-      ws,
-      playerId: 'player-0',
-      name,
-    }
-
-    room.connections.set(connectionId, conn)
     rooms.set(code, room)
-    connectionRooms.set(connectionId, code)
+    attachConnection(room, connectionId, ws, hostSeat)
     broadcastLobby(room)
+    return
+  }
+
+  if (message.type === 'rejoin') {
+    handleRejoin(connectionId, ws, message.code, message.token)
     return
   }
 
@@ -250,7 +389,7 @@ export function handleClientMessage(
   }
 
   const conn = room.connections.get(connectionId)
-  if (!conn?.playerId) {
+  if (!conn) {
     sendError(ws, 'You are not seated in this room.')
     return
   }
@@ -260,8 +399,13 @@ export function handleClientMessage(
     return
   }
 
+  if (message.type === 'kick') {
+    handleKick(room, conn, message.playerId)
+    return
+  }
+
   if (message.type === 'start') {
-    if (connectionId !== room.hostConnectionId) {
+    if (conn.playerId !== room.hostPlayerId) {
       sendError(ws, 'Only the host can start the game.')
       return
     }
@@ -269,6 +413,11 @@ export function handleClientMessage(
     const seated = lobbyPlayers(room)
     if (seated.length < MIN_ONLINE_PLAYERS) {
       sendError(ws, `Need at least ${MIN_ONLINE_PLAYERS} players to start.`)
+      return
+    }
+
+    if (seated.some((p) => !p.connected)) {
+      sendError(ws, 'All players must be connected to start.')
       return
     }
 
@@ -291,6 +440,7 @@ export function handleClientMessage(
     if (message.type === 'newGame') {
       room.gameState = null
       room.roundEndPending = null
+      clearTurnTimer(room)
       broadcastLobby(room)
       return
     }
@@ -365,15 +515,16 @@ export function handleClientMessage(
   if (message.type === 'newGame') {
     room.gameState = null
     room.roundEndPending = null
+    clearTurnTimer(room)
     broadcastLobby(room)
   }
 }
 
-export function handleJoinRoom(
+function handleRejoin(
   connectionId: string,
   ws: WebSocket,
   code: string,
-  name: string
+  token: string
 ) {
   const room = rooms.get(code.toUpperCase())
   if (!room) {
@@ -381,8 +532,56 @@ export function handleJoinRoom(
     return
   }
 
+  const seat = room.seats.find((s) => s.token === token)
+  if (!seat) {
+    sendError(ws, 'Invalid rejoin token.')
+    return
+  }
+
+  if (seat.connectionId) {
+    const existing = room.connections.get(seat.connectionId)
+    if (existing?.ws.readyState === existing.ws.OPEN) {
+      sendError(ws, 'This seat is already connected.')
+      return
+    }
+    room.connections.delete(seat.connectionId)
+    connectionRooms.delete(seat.connectionId)
+  }
+
+  attachConnection(room, connectionId, ws, seat)
+
+  if (room.gameState?.phase === 'playing' || room.roundEndPending) {
+    if (room.roundEndPending) {
+      broadcastRoundEnd(room)
+    } else if (room.gameState) {
+      broadcastGame(room, `${seat.name} rejoined.`)
+    }
+    return
+  }
+
+  broadcastLobby(room)
+}
+
+export function handleJoinRoom(
+  connectionId: string,
+  ws: WebSocket,
+  code: string,
+  name: string,
+  rejoinToken?: string
+) {
+  const room = rooms.get(code.toUpperCase())
+  if (!room) {
+    sendError(ws, 'Room not found. Check the code.')
+    return
+  }
+
+  if (rejoinToken) {
+    handleRejoin(connectionId, ws, code, rejoinToken)
+    return
+  }
+
   if (room.gameState?.phase === 'playing') {
-    sendError(ws, 'This game already started.')
+    sendError(ws, 'This game already started. Use your invite link to rejoin.')
     return
   }
 
@@ -392,15 +591,16 @@ export function handleJoinRoom(
     return
   }
 
-  const conn: Connection = {
-    id: connectionId,
-    ws,
+  const seat: PlayerSeat = {
     playerId,
     name: name.trim() || `Player ${playerId.split('-')[1]}`,
+    token: makeToken(),
+    connectionId: null,
+    disconnectTimer: null,
   }
 
-  room.connections.set(connectionId, conn)
-  connectionRooms.set(connectionId, room.code)
+  room.seats.push(seat)
+  attachConnection(room, connectionId, ws, seat)
   broadcastLobby(room)
 }
 
@@ -411,21 +611,40 @@ export function handleDisconnect(connectionId: string) {
   const room = rooms.get(roomCode)
   if (!room) return
 
+  const conn = room.connections.get(connectionId)
+  const playerId = conn?.playerId
   room.connections.delete(connectionId)
   connectionRooms.delete(connectionId)
 
+  if (playerId) {
+    const seat = findSeat(room, playerId)
+    if (seat) {
+      seat.connectionId = null
+      if (room.gameState?.phase === 'playing') {
+        scheduleDisconnectAutoPlay(room, playerId)
+      }
+    }
+  }
+
   if (room.connections.size === 0) {
+    clearTurnTimer(room)
+    for (const s of room.seats) clearDisconnectTimer(s)
     rooms.delete(roomCode)
     return
   }
 
-  if (connectionId === room.hostConnectionId) {
-    const next = room.connections.keys().next().value
-    if (next) room.hostConnectionId = next
+  if (conn && conn.playerId === room.hostPlayerId) {
+    const nextConn = room.connections.values().next().value
+    if (nextConn) room.hostPlayerId = nextConn.playerId
   }
 
-  if (room.gameState) {
-    broadcastGame(room, 'A player disconnected.')
+  if (room.gameState?.phase === 'playing') {
+    const name = playerId ? findSeat(room, playerId)?.name ?? 'A player' : 'A player'
+    if (room.roundEndPending) {
+      broadcastRoundEnd(room)
+    } else {
+      broadcastGame(room, `${name} disconnected.`)
+    }
   } else {
     broadcastLobby(room)
   }
@@ -449,7 +668,18 @@ export function handleConnection(ws: WebSocket) {
     }
 
     if (parsed.type === 'join') {
-      handleJoinRoom(connectionId, ws, parsed.code, parsed.name)
+      handleJoinRoom(
+        connectionId,
+        ws,
+        parsed.code,
+        parsed.name,
+        parsed.rejoinToken
+      )
+      return
+    }
+
+    if (parsed.type === 'rejoin') {
+      handleRejoin(connectionId, ws, parsed.code, parsed.token)
       return
     }
 

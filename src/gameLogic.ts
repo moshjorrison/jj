@@ -228,19 +228,15 @@ export function listPlayableCards(player: Player): { pick: CardPick; card: Card 
     card,
   }))
 
-  const faceUpCards = player.faceUp
-    .map((card, index) =>
-      card ? { pick: { zone: 'faceUp' as const, index }, card } : null
-    )
-    .filter((x): x is { pick: CardPick; card: Card } => x !== null)
+  const faceUpCards = player.faceUp.flatMap((card, index) =>
+    card ? [{ pick: { zone: 'faceUp' as const, index }, card }] : []
+  )
 
-  const faceDownCards = player.faceDown
-    .map((card, index) =>
-      card && isFaceDownAvailable(player, index)
-        ? { pick: { zone: 'faceDown' as const, index }, card }
-        : null
-    )
-    .filter((x): x is { pick: CardPick; card: Card } => x !== null)
+  const faceDownCards = player.faceDown.flatMap((card, index) =>
+    card && isFaceDownAvailable(player, index)
+      ? [{ pick: { zone: 'faceDown' as const, index }, card }]
+      : []
+  )
 
   return [...handCards, ...faceUpCards, ...faceDownCards]
 }
