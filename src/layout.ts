@@ -16,11 +16,9 @@ export type LayoutSizes = {
 
 const CARD_ASPECT = 73 / 52
 
-const MOBILE_REFERENCE_HEIGHT = 640
-
 export function computeLayout(
   viewportWidth: number,
-  viewportHeight: number,
+  _viewportHeight: number,
   isTouch: boolean
 ): LayoutSizes {
   const isMobile = viewportWidth < 520
@@ -29,15 +27,10 @@ export function computeLayout(
     : 520
 
   const widthScale = isMobile
-    ? Math.min(1.04, Math.max(0.82, (viewportWidth - 8) / 375))
+    ? Math.min(1, Math.max(0.78, (viewportWidth - 12) / 390))
     : 1
 
-  const heightBudget = viewportHeight - 16
-  const heightScale = isMobile
-    ? Math.min(1, Math.max(0.62, heightBudget / MOBILE_REFERENCE_HEIGHT))
-    : 1
-
-  const scale = isMobile ? widthScale * heightScale : 1
+  const scale = isMobile ? widthScale : 1
 
   const cardWidth = snapPx(54 * scale)
   const cardHeight = snapPx(cardWidth * CARD_ASPECT)

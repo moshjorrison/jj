@@ -92,8 +92,8 @@ export function TableCards({
   const layout = useLayout()
   const w = isBottom ? layout.cardWidth : layout.opponentCardWidth
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight
-  const overlap = spreadCards ? 0 : 10
-  const slotGap = spreadCards ? 6 : isBottom ? 12 : 8
+  const overlap = spreadCards ? 0 : isBottom && layout.isMobile ? 6 : 10
+  const slotGap = spreadCards ? 6 : isBottom ? (layout.isMobile ? 3 : 12) : 8
   const isVertical = !isBottom && (display === 'left' || display === 'right')
   const rotation = isBottom ? 0 : cardFaceRotation(display)
 
