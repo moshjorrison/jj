@@ -92,8 +92,8 @@ export function TableCards({
   const layout = useLayout()
   const w = isBottom ? layout.cardWidth : layout.opponentCardWidth
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight
-  const overlap = spreadCards ? 0 : 10
-  const slotGap = spreadCards ? 6 : isBottom ? 12 : 8
+  const overlap = spreadCards ? 0 : isBottom && layout.isMobile ? 6 : 10
+  const slotGap = spreadCards ? 6 : isBottom ? (layout.isMobile ? 4 : 12) : 8
   const isVertical = !isBottom && (display === 'left' || display === 'right')
   const rotation = isBottom ? 0 : cardFaceRotation(display)
 
@@ -498,6 +498,7 @@ export function OpponentStrip({
   getRevealFlags,
   spreadCards = false,
   disconnectedIds = [],
+  compact = false,
 }: {
   opponents: Player[]
   turnRank: Rank | null
@@ -505,6 +506,7 @@ export function OpponentStrip({
   getRevealFlags: (player: Player | undefined) => RevealFlags
   spreadCards?: boolean
   disconnectedIds?: string[]
+  compact?: boolean
 }) {
   return (
     <div
@@ -563,6 +565,7 @@ export function OpponentStrip({
                     revealCards={reveal.revealHand}
                     spreadCards={spreadCards && reveal.revealHand}
                   />
+                  {!compact && (
                   <TableCards
                     player={player}
                     display="top"
@@ -573,6 +576,7 @@ export function OpponentStrip({
                     revealFaceDown={reveal.revealFaceDown}
                     spreadCards={spreadCards && reveal.revealFaceDown}
                   />
+                  )}
                   {reveal.showPointsBanner && (
                     <SeatPointsBanner
                       points={reveal.points}

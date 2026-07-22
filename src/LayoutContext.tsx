@@ -15,6 +15,7 @@ function getViewportSize() {
   return {
     width: vv?.width ?? window.innerWidth,
     height: vv?.height ?? window.innerHeight,
+    offsetTop: vv?.offsetTop ?? 0,
   }
 }
 
@@ -47,8 +48,14 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const layout = useMemo(
-    () => computeLayout(viewport.width, viewport.height, isTouch),
-    [viewport.width, viewport.height, isTouch]
+    () =>
+      computeLayout(
+        viewport.width,
+        viewport.height,
+        isTouch,
+        viewport.offsetTop
+      ),
+    [viewport.width, viewport.height, viewport.offsetTop, isTouch]
   )
 
   return (

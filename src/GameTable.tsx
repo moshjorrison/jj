@@ -11,6 +11,7 @@ import {
   SeatPointsBanner,
   TableCards,
 } from './gameTable/TableComponents';
+import { useMobileBoardScale } from './gameTable/useMobileBoardScale';
 import { TurnTimer } from './gameTable/TurnTimer';
 import type {
   FlyingCard,
@@ -126,6 +127,8 @@ export default function GameTable() {
   const topAreaRef = useRef<HTMLDivElement | null>(null);
   const leftAreaRef = useRef<HTMLDivElement | null>(null);
   const rightAreaRef = useRef<HTMLDivElement | null>(null);
+  const tableAreaRef = useRef<HTMLDivElement | null>(null);
+  const tableGridRef = useRef<HTMLDivElement | null>(null);
   const animationTimerRef = useRef<number | null>(null);
   const roundRevealTimersRef = useRef<number[]>([]);
 
@@ -880,13 +883,11 @@ export default function GameTable() {
     ).length > 1;
 
   const useExpandedTable = state.playerCount > MAX_LOCAL_PLAYERS;
+  const useCompactOpponents = layout.isMobile && state.playerCount >= 3;
+  const showOpponentStrip = useExpandedTable || useCompactOpponents;
   const tablePlayers = pendingState?.players ?? state.players;
-  const showLeft = !useExpandedTable && state.playerCount >= 3;
-  const showRight = !useExpandedTable && state.playerCount === 4;
-  const opponents =
-    useExpandedTable && localPlayer
-      ? opponentsFromView(tablePlayers, localPlayer.id)
-      : [];
+  const showLeft = !showOpponentStrip && state.playerCount >= 3;
+  const showRight = !showOpponentStrip && state.playerCount === 4;
   const top = playerAtDisplay(
     tablePlayers,
     'top',
@@ -910,6 +911,12 @@ export default function GameTable() {
       ? tablePlayers.find((p) => p.id === localPlayer.id) ?? localPlayer
       : playerAtDisplay(tablePlayers, 'bottom', viewSeat, state.playerCount) ??
         tablePlayers[0];
+  const opponents = showOpponentStrip
+    ? opponentsFromView(
+        tablePlayers,
+        bottom?.id ?? localPlayer?.id ?? tablePlayers[0]?.id ?? ''
+      )
+    : [];
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
@@ -1002,11 +1009,28 @@ export default function GameTable() {
         ? `${displayName(currentPlayer)}'s turn`
         : '';
 
+  const boardScale = useMobileBoardScale(
+    tableAreaRef,
+    tableGridRef,
+    layout.isMobile && showTable,
+    [
+      state.phase,
+      state.playerCount,
+      bottom?.hand.length,
+      roundReveal,
+      showOpponentStrip,
+      selectedKeys.size,
+      layout.cardWidth,
+      layout.viewportHeight,
+    ]
+  );
+
   return (
     <div
-      className="game-felt"
+      className={`game-felt${layout.isMobile ? ' game-felt--mobile' : ''}`}
       style={{
-        height: '100dvh',
+        height: layout.isMobile ? layout.viewportHeight : '100dvh',
+        top: layout.isMobile ? layout.viewportOffsetTop : undefined,
         color: 'white',
         padding:
           'max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(max(4px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(4px, env(safe-area-inset-left))',
@@ -1133,13 +1157,15 @@ export default function GameTable() {
           <div>
             <div
               style={{
-                fontSize: layout.isMobile ? 24 : 22,
+                fontSize: layout.isMobile ? 20 : 22,
                 fontWeight: 800,
                 letterSpacing: -0.3,
+                lineHeight: 1.1,
               }}
             >
               J&amp;J
             </div>
+            {!layout.isMobile && (
             <div
               style={{
                 fontSize: 12,
@@ -1154,6 +1180,7 @@ export default function GameTable() {
                   ? 'Online'
                   : 'vs AI'}
             </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
@@ -1164,14 +1191,14 @@ export default function GameTable() {
                 setSoundMuted(next);
               }}
               style={{
-                padding: '8px 12px',
+                padding: layout.isMobile ? '6px 10px' : '8px 12px',
                 borderRadius: 8,
                 border: '1px solid rgba(255,255,255,0.18)',
                 background: 'rgba(255,255,255,0.08)',
                 color: 'white',
                 fontWeight: 700,
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: layout.isMobile ? 11 : 12,
               }}
               aria-label={soundMuted ? 'Unmute sounds' : 'Mute sounds'}
             >
@@ -1182,7 +1209,7 @@ export default function GameTable() {
               onClick={handleNewGame}
             disabled={isAnimating && !roundReveal?.revealComplete}
             style={{
-              padding: '8px 16px',
+              padding: layout.isMobile ? '6px 10px' : '8px 16px',
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.18)',
               background:
@@ -1233,6 +1260,18 @@ export default function GameTable() {
 
         {showTable && bottom && (
           <div
+            ref={tableAreaRef}
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              justifyContent: 'center',
+              width: '100%',
+            }}
+          >
+          <div
+            ref={tableGridRef}
             style={{
               display: 'grid',
               gridTemplateColumns: showLeft
@@ -1242,9 +1281,9 @@ export default function GameTable() {
               gap: layout.isMobile ? 2 : 8,
               alignItems: 'center',
               justifyItems: 'center',
-              flex: 1,
-              minHeight: 0,
-              overflow: 'hidden',
+              width: '100%',
+              transform: layout.isMobile ? `scale(${boardScale})` : undefined,
+              transformOrigin: 'top center',
             }}
           >
             {showLeft && <div />}
@@ -1265,14 +1304,14 @@ export default function GameTable() {
                 disconnectedIds={disconnectedIds}
                 compact={layout.isMobile}
               />
-              {state.lastRoundDeltas && !roundReveal && (
+              {state.lastRoundDeltas && !roundReveal && !layout.isMobile && (
                 <RoundScoreRecap
                   players={state.players}
                   deltas={state.lastRoundDeltas}
                 />
               )}
 
-              {useExpandedTable ? (
+              {showOpponentStrip ? (
                 <OpponentStrip
                   opponents={opponents}
                   turnRank={state.turnRank}
@@ -1280,6 +1319,7 @@ export default function GameTable() {
                   getRevealFlags={getRevealFlags}
                   spreadCards={spreadRoundCards}
                   disconnectedIds={disconnectedIds}
+                  compact={useCompactOpponents}
                 />
               ) : (
               <SeatBlock
@@ -1410,11 +1450,13 @@ export default function GameTable() {
                       ? reviewingLeftoverCardsHint()
                       : 'Everyone must continue before the next deal.'
                   }
+                  compact={layout.isMobile}
                 />
               ) : (
                 <MessageBar
                   message={normalizeMessage(message)}
                   hint={actionHint}
+                  compact={layout.isMobile}
                 />
               )}
 
@@ -1424,7 +1466,7 @@ export default function GameTable() {
                   disabled={!canPressContinue}
                   onClick={handleContinueAfterRoundReveal}
                   style={{
-                    ...btnStyle(canPressContinue),
+                    ...btnStyle(canPressContinue, layout.isMobile),
                     minWidth: 220,
                     marginTop: 8,
                   }}
@@ -1621,7 +1663,7 @@ export default function GameTable() {
                           disabled={isAnimating}
                           onClick={() => handlePlay()}
                           style={{
-                            ...btnStyle(!isAnimating),
+                            ...btnStyle(!isAnimating, layout.isMobile),
                             background: 'rgba(22,163,74,0.9)',
                             border: '1px solid rgba(255,255,255,0.25)',
                             minWidth: layout.isMobile ? 100 : 110,
@@ -1638,7 +1680,7 @@ export default function GameTable() {
                         type="button"
                         disabled={!canOverplaySelected}
                         onClick={handleOverplay}
-                        style={btnStyle(canOverplaySelected)}
+                        style={btnStyle(canOverplaySelected, layout.isMobile)}
                       >
                         OVERPLAY
                       </button>
@@ -1665,7 +1707,8 @@ export default function GameTable() {
                         }}
                         style={{
                           ...btnStyle(
-                            canEndTurn(state, bottom.id) && !isAnimating
+                            canEndTurn(state, bottom.id) && !isAnimating,
+                            layout.isMobile
                           ),
                           whiteSpace: 'nowrap',
                           minWidth: 96,
@@ -1680,6 +1723,7 @@ export default function GameTable() {
             </div>
             <div />
           </div>
+          </div>
         )}
 
         <FlyingCardsOverlay cards={flyingCards} />
@@ -1688,10 +1732,10 @@ export default function GameTable() {
   );
 }
 
-function btnStyle(enabled: boolean): React.CSSProperties {
+function btnStyle(enabled: boolean, isMobile = false): React.CSSProperties {
   return {
-    padding: '11px 18px',
-    borderRadius: 10,
+    padding: isMobile ? '7px 12px' : '11px 18px',
+    borderRadius: isMobile ? 8 : 10,
     border: enabled
       ? '0.5px solid rgba(255,255,255,0.28)'
       : '0.5px solid rgba(255,255,255,0.12)',
@@ -1700,7 +1744,7 @@ function btnStyle(enabled: boolean): React.CSSProperties {
       : 'rgba(255,255,255,0.05)',
     color: enabled ? 'white' : 'rgba(255,255,255,0.25)',
     fontWeight: 700,
-    fontSize: 14,
+    fontSize: isMobile ? 12 : 14,
     cursor: enabled ? 'pointer' : 'default',
     textTransform: 'uppercase',
     letterSpacing: 0.7,

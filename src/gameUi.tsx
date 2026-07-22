@@ -120,19 +120,24 @@ export function TurnChip({
 export function MessageBar({
   message,
   hint,
+  compact = false,
 }: {
   message: string
   hint: string | null
+  compact?: boolean
 }) {
   return (
-    <div className="message-bar" style={{ width: '100%', maxWidth: 380 }}>
+    <div
+      className="message-bar"
+      style={{ width: '100%', maxWidth: compact ? 340 : 380 }}
+    >
       <div
         key={message}
         className="message-bar-text"
         style={{
-          fontSize: 14,
+          fontSize: compact ? 12 : 14,
           fontWeight: 600,
-          lineHeight: 1.35,
+          lineHeight: compact ? 1.25 : 1.35,
           textAlign: 'center',
           ...sharpText,
         }}
