@@ -158,8 +158,9 @@ function scheduleDisconnectAutoPlay(room: Room, playerId: string) {
   }, DISCONNECT_AUTO_PLAY_MS)
 }
 
-function lobbyMessage(room: Room, conn: Connection): ServerMessage {
-  const seat = findSeat(room, conn.playerId)!
+function lobbyMessage(room: Room, conn: Connection): ServerMessage | null {
+  const seat = findSeat(room, conn.playerId)
+  if (!seat) return null
   return {
     type: 'lobby',
     code: room.code,
@@ -173,12 +174,14 @@ function lobbyMessage(room: Room, conn: Connection): ServerMessage {
 
 function broadcastLobby(room: Room) {
   for (const conn of room.connections.values()) {
-    sendJson(conn.ws, lobbyMessage(room, conn))
+    const msg = lobbyMessage(room, conn)
+    if (msg) sendJson(conn.ws, msg)
   }
 }
 
 function broadcastGame(room: Room, message: string) {
   if (!room.gameState) return
+  scheduleTurnTimer(room)
   const disconnected = disconnectedPlayerIds(room)
 
   for (const conn of room.connections.values()) {
@@ -191,8 +194,6 @@ function broadcastGame(room: Room, message: string) {
     }
     sendJson(conn.ws, msg)
   }
-
-  scheduleTurnTimer(room)
 }
 
 function broadcastRoundEnd(room: Room) {
@@ -321,6 +322,8 @@ function handleKick(room: Room, hostConn: Connection, targetPlayerId: string) {
   const seat = room.seats[seatIndex]!
   if (seat.connectionId) {
     const conn = room.connections.get(seat.connectionId)
+    room.connections.delete(seat.connectionId)
+    connectionRooms.delete(seat.connectionId)
     conn?.ws.close()
   }
 

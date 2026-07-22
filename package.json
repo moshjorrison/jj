@@ -13,7 +13,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:online": "node scripts/test-online.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
