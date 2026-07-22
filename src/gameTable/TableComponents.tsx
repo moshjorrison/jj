@@ -349,11 +349,47 @@ export function ScorePanel({
   players,
   currentId,
   disconnectedIds = [],
+  compact = false,
 }: {
   players: Player[]
   currentId: string
   disconnectedIds?: string[]
+  compact?: boolean
 }) {
+  if (compact) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '2px 14px',
+          justifyContent: 'center',
+          width: '100%',
+          background: 'rgba(255,255,255,0.07)',
+          border: '0.5px solid rgba(255,255,255,0.18)',
+          borderRadius: 8,
+          padding: '5px 12px',
+        }}
+      >
+        {players.map((p) => (
+          <span
+            key={p.id}
+            style={{
+              fontSize: 12,
+              fontWeight: p.id === currentId ? 700 : 500,
+              color: p.id === currentId ? '#60a5fa' : undefined,
+              opacity: disconnectedIds.includes(p.id) ? 0.45 : 1,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {displayName(p)}
+            {disconnectedIds.includes(p.id) ? ' ○' : ''}: {p.score}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div
       style={{

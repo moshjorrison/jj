@@ -1128,7 +1128,7 @@ export default function GameTable() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: layout.isMobile ? 8 : 6,
+            marginBottom: showTable ? 4 : layout.isMobile ? 8 : 6,
             gap: 8,
           }}
         >
@@ -1207,22 +1207,40 @@ export default function GameTable() {
           </div>
         </div>
 
-        {state.phase === 'playing' && !roundReveal && currentPlayer && (
+        {showTable && (
           <div
             style={{
               display: 'flex',
-              justifyContent: 'center',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: 10,
-              marginBottom: 8,
+              gap: 6,
+              marginBottom: 6,
+              width: '100%',
             }}
           >
-            <TurnChip label={turnChipLabel} isYours={isLocalTurn} />
-            {mode === 'online' && (
-              <TurnTimer
-                deadlineMs={online.turnDeadline}
-                active={!isAnimating}
-              />
+            <ScorePanel
+              compact
+              players={roundReveal?.pendingFinalState.players ?? state.players}
+              currentId={localPlayer?.id ?? state.currentPlayerId}
+              disconnectedIds={disconnectedIds}
+            />
+            {state.phase === 'playing' && !roundReveal && currentPlayer && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
+                <TurnChip label={turnChipLabel} isYours={isLocalTurn} />
+                {mode === 'online' && (
+                  <TurnTimer
+                    deadlineMs={online.turnDeadline}
+                    active={!isAnimating}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1238,11 +1256,11 @@ export default function GameTable() {
             style={{
               display: 'grid',
               gridTemplateColumns: showLeft
-                ? 'auto auto auto'
+                ? 'minmax(0, 1fr) auto minmax(0, 1fr)'
                 : '1fr',
               gridTemplateRows: 'auto auto auto auto',
               rowGap: layout.isMobile ? 4 : 8,
-              columnGap: showLeft ? (layout.isMobile ? 6 : 10) : 0,
+              columnGap: showLeft ? (layout.isMobile ? 4 : 8) : 0,
               alignItems: 'center',
               justifyItems: 'center',
               justifyContent: 'center',
@@ -1257,15 +1275,10 @@ export default function GameTable() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 10,
+                gap: layout.isMobile ? 4 : 8,
                 position: 'relative',
               }}
             >
-              <ScorePanel
-                players={roundReveal?.pendingFinalState.players ?? state.players}
-                currentId={localPlayer?.id ?? state.currentPlayerId}
-                disconnectedIds={disconnectedIds}
-              />
               {state.lastRoundDeltas && !roundReveal && (
                 <RoundScoreRecap
                   players={state.players}
@@ -1328,7 +1341,10 @@ export default function GameTable() {
             {showRight && <div />}
 
             {showLeft && (
-              <div ref={leftAreaRef} style={{ position: 'relative' }}>
+              <div
+                ref={leftAreaRef}
+                style={{ position: 'relative', justifySelf: 'end' }}
+              >
                 <SeatBlock
                   player={left}
                   isActiveTurn={left?.id === state.currentPlayerId && !roundReveal}
@@ -1434,7 +1450,10 @@ export default function GameTable() {
             </div>
 
             {showRight && (
-              <div ref={rightAreaRef} style={{ position: 'relative' }}>
+              <div
+                ref={rightAreaRef}
+                style={{ position: 'relative', justifySelf: 'start' }}
+              >
                 <SeatBlock
                   player={right}
                   isActiveTurn={right?.id === state.currentPlayerId && !roundReveal}
