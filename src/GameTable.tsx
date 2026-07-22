@@ -930,13 +930,13 @@ export default function GameTable() {
         for (let i = 0; i < entries.length; i += perRow) {
           rows.push(entries.slice(i, i + perRow))
         }
-        const minRows = layout.isMobile ? 2 : 3
+        const minRows = 2
         while (rows.length < minRows) {
           rows.push([])
         }
         return rows
       })()
-    : Array.from({ length: layout.isMobile ? 2 : 3 }, () => [] as { card: Card; handIndex: number }[])
+    : Array.from({ length: 2 }, () => [] as { card: Card; handIndex: number }[])
 
   const revealEntryById = new Map(
     (roundReveal?.players ?? []).map((entry) => [entry.playerId, entry])

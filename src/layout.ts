@@ -19,7 +19,7 @@ export type LayoutSizes = {
 
 const CARD_ASPECT = 73 / 52
 const TABLE_SLOTS = 4
-const HAND_CARDS_PER_ROW_MOBILE = 6
+const HAND_CARDS_PER_ROW = 7
 
 export function computeLayout(
   viewportWidth: number,
@@ -47,15 +47,12 @@ export function computeLayout(
     : snapPx(54 * scale)
   const cardHeight = snapPx(cardWidth * CARD_ASPECT)
 
-  const handCardWidth = isMobile
-    ? snapPx(
-        Math.min(
-          cardWidth,
-          (boardMaxWidth - handGap * (HAND_CARDS_PER_ROW_MOBILE - 1)) /
-            HAND_CARDS_PER_ROW_MOBILE
-        )
-      )
-    : cardWidth
+  const handCardWidth = snapPx(
+    Math.min(
+      cardWidth,
+      (boardMaxWidth - handGap * (HAND_CARDS_PER_ROW - 1)) / HAND_CARDS_PER_ROW
+    )
+  )
   const handCardHeight = snapPx(handCardWidth * CARD_ASPECT)
   const opponentCardWidth = snapPx(30 * scale)
   const opponentCardHeight = snapPx(opponentCardWidth * CARD_ASPECT)
@@ -70,7 +67,7 @@ export function computeLayout(
     cardHeight,
     handCardWidth,
     handCardHeight,
-    handCardsPerRow: isMobile ? HAND_CARDS_PER_ROW_MOBILE : 5,
+    handCardsPerRow: HAND_CARDS_PER_ROW,
     opponentCardWidth,
     opponentCardHeight,
     opponentHandStep,
