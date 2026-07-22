@@ -12,22 +12,16 @@ export type LayoutSizes = {
   handGap: number
   isMobile: boolean
   isTouch: boolean
-  viewportHeight: number
-  viewportOffsetTop: number
 }
 
 const CARD_ASPECT = 73 / 52
 
-/** Non-card chrome: header, turn chip, scores, message, buttons, safe area. */
-const MOBILE_CHROME_HEIGHT = 190
-/** Target height for card/table areas on a reference phone. */
-const MOBILE_CONTENT_HEIGHT = 470
+const MOBILE_REFERENCE_HEIGHT = 640
 
 export function computeLayout(
   viewportWidth: number,
   viewportHeight: number,
-  isTouch: boolean,
-  viewportOffsetTop = 0
+  isTouch: boolean
 ): LayoutSizes {
   const isMobile = viewportWidth < 520
   const boardMaxWidth = isMobile
@@ -38,9 +32,9 @@ export function computeLayout(
     ? Math.min(1.04, Math.max(0.82, (viewportWidth - 8) / 375))
     : 1
 
-  const contentBudget = Math.max(280, viewportHeight - MOBILE_CHROME_HEIGHT)
+  const heightBudget = viewportHeight - 16
   const heightScale = isMobile
-    ? Math.min(1, Math.max(0.55, contentBudget / MOBILE_CONTENT_HEIGHT))
+    ? Math.min(1, Math.max(0.62, heightBudget / MOBILE_REFERENCE_HEIGHT))
     : 1
 
   const scale = isMobile ? widthScale * heightScale : 1
@@ -68,7 +62,5 @@ export function computeLayout(
     handGap,
     isMobile,
     isTouch,
-    viewportHeight,
-    viewportOffsetTop,
   }
 }
