@@ -33,6 +33,7 @@ export type OnlineSession = {
   sendPlay: (picks: CardPick[]) => void
   sendFlip: (index: number) => void
   sendEndTurn: () => void
+  sendPickUp: () => void
   sendOverplay: (pick: CardPick) => void
   sendTiebreaker: () => void
   sendNewGame: () => void
@@ -309,6 +310,10 @@ export function useOnlineGame(): OnlineSession {
     send({ type: 'endTurn' })
   }, [send])
 
+  const sendPickUp = useCallback(() => {
+    send({ type: 'pickUp' })
+  }, [send])
+
   const sendOverplay = useCallback(
     (pick: CardPick) => {
       send({ type: 'overplay', pick })
@@ -380,6 +385,7 @@ export function useOnlineGame(): OnlineSession {
     sendPlay,
     sendFlip,
     sendEndTurn,
+    sendPickUp,
     sendOverplay,
     sendTiebreaker,
     sendNewGame,

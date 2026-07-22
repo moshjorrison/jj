@@ -6,7 +6,6 @@ import {
   isClear,
   isFaceDownAvailable,
   isIntentionalOverplay,
-  listLegalPlays,
   playerHasNoCards,
   scoreRemainingCards,
   sortHand,
@@ -136,10 +135,6 @@ function pickupPileForPlayer(state: GameState, playerId: string): GameState {
   next = { ...next, activePile: [] }
 
   return endTurnState(next, playerId)
-}
-
-function hasAnyOpeningPlayOption(state: GameState, player: Player): boolean {
-  return listLegalPlays(player, state.activePile, null).length > 0
 }
 
 export type PlayResult = {
@@ -390,30 +385,26 @@ export function flipFaceDown(
   return playCards(state, playerId, [{ zone: 'faceDown', index }])
 }
 
+export function canEndTurn(state: GameState, playerId: string): boolean {
+  return state.currentPlayerId === playerId && state.turnRank !== null
+}
+
+export function canPickUpPile(state: GameState, playerId: string): boolean {
+  return (
+    state.currentPlayerId === playerId &&
+    state.phase === 'playing' &&
+    state.activePile.length > 0 &&
+    (state.turnRank !== null || state.formTurnUsed)
+  )
+}
+
 export function endTurn(state: GameState, playerId: string): GameState {
-  if (state.currentPlayerId !== playerId) return state
-
-  if (state.turnRank !== null || state.formTurnUsed) {
-    return endTurnState(state, playerId)
-  }
-
-  const player = getPlayer(state, playerId)
-  if (hasAnyOpeningPlayOption(state, player)) {
-    return state
-  }
-
+  if (!canEndTurn(state, playerId)) return state
   return endTurnState(state, playerId)
 }
 
 export function pickUpPile(state: GameState, playerId: string): GameState {
-  if (state.currentPlayerId !== playerId || state.activePile.length === 0) {
-    return state
-  }
-
-  if (state.turnRank === null && !state.formTurnUsed) {
-    return state
-  }
-
+  if (!canPickUpPile(state, playerId)) return state
   return pickupPileForPlayer(state, playerId)
 }
 

@@ -249,6 +249,7 @@ function pickBestOverplay(player: Player, state: GameState): CardPick | null {
 
 function runAiTurnOnce(state: GameState, player: Player): AiStep | null {
   const playerId = player.id
+  const legal = listLegalPlays(player, state.activePile, state.turnRank)
 
   const picks = pickBestPlayGroup(player, state)
   if (picks && picks.length > 0) {
@@ -308,8 +309,9 @@ function runAiTurnOnce(state: GameState, player: Player): AiStep | null {
     }
 
     const overplayPick = pickBestOverplay(player, state)
-    if (shouldOverplay(player, state, overplayPick)) {
-      const result = playIntentionalOverplay(state, playerId, overplayPick!)
+    const mustOverplay = legal.length === 0 && !!overplayPick
+    if (overplayPick && (mustOverplay || shouldOverplay(player, state, overplayPick))) {
+      const result = playIntentionalOverplay(state, playerId, overplayPick)
       if (result) {
         return {
           state: result.state,
@@ -318,6 +320,8 @@ function runAiTurnOnce(state: GameState, player: Player): AiStep | null {
         }
       }
     }
+
+    return null
   }
 
   return {

@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { gpuLayer, sharpText } from './display';
+import {
+  MessageBar,
+  PileBannerOverlay,
+  TurnChip,
+  actionHintForTurn,
+  displayName,
+  displayPossessive,
+  normalizeMessage,
+  pileBannerVariant,
+  seatBlockNameStyle,
+  turnHandoffMessage,
+  type PileBannerVariant,
+} from './gameUi';
 import { runAiStep } from './ai';
 import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
 import {
@@ -29,9 +42,12 @@ import {
 } from './gameLogic';
 import {
   checkRoundEnd,
+  canEndTurn,
+  canPickUpPile,
   createSetupState,
   endTurn,
   flipFaceDown,
+  pickUpPile,
   playCards,
   playIntentionalOverplay,
   startGame,
@@ -101,18 +117,6 @@ function requiredContinuePlayerIds(
     return players.filter((p) => p.isHuman).map((p) => p.id);
   }
   return players.map((p) => p.id);
-}
-
-function displayName(player: Player) {
-  return player.id === 'player-0' ? 'You' : player.name;
-}
-
-function displayPossessive(player: Player) {
-  return player.id === 'player-0' ? 'Your' : `${player.name}'s`;
-}
-
-function normalizeMessage(message: string) {
-  return message.replaceAll('Player 1', 'You').replaceAll("You's", 'Your');
 }
 
 function seatRotation(seat: Seat) {
@@ -576,9 +580,11 @@ function ScorePanel({
 
 function SeatBlock({
   player,
+  isActiveTurn = false,
   children,
 }: {
   player: Player | undefined;
+  isActiveTurn?: boolean;
   children?: React.ReactNode;
 }) {
   if (!player) return <div />;
@@ -591,15 +597,7 @@ function SeatBlock({
         gap: player.seat === 'bottom' ? 4 : 6,
       }}
     >
-      <div
-        style={{
-          fontWeight: 700,
-          fontSize: 14,
-          lineHeight: 1,
-        }}
-      >
-        {displayName(player)}
-      </div>
+      <div style={seatBlockNameStyle(isActiveTurn)}>{displayName(player)}</div>
       {children}
     </div>
   );
@@ -697,7 +695,10 @@ function OpponentStrip({
                   : 'rgba(255,255,255,0.04)',
               }}
             >
-              <SeatBlock player={player}>
+              <SeatBlock
+                player={player}
+                isActiveTurn={player.id === currentPlayerId}
+              >
                 <div
                   style={{
                     display: 'flex',
@@ -754,7 +755,10 @@ export default function GameTable() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('Choose players and start.');
   const [showPassBanner, setShowPassBanner] = useState(false);
-  const [pileBanner, setPileBanner] = useState<string | null>(null);
+  const [pileBanner, setPileBanner] = useState<{
+    text: string;
+    variant: PileBannerVariant;
+  } | null>(null);
   const [flyingCards, setFlyingCards] = useState<FlyingCard[]>([]);
   const [pendingState, setPendingState] = useState<GameState | null>(null);
   const [roundReveal, setRoundReveal] = useState<RoundRevealState | null>(null);
@@ -803,12 +807,16 @@ export default function GameTable() {
     return rightAreaRef;
   }, []);
 
-  const showPileBanner = useCallback((text: string, duration = 1500) => {
-    setPileBanner(text);
-    window.setTimeout(() => {
-      setPileBanner((current) => (current === text ? null : current));
-    }, duration);
-  }, []);
+  const showPileBanner = useCallback(
+    (text: string, duration = 1500, variant?: PileBannerVariant) => {
+      const resolved = variant ?? pileBannerVariant(text);
+      setPileBanner({ text, variant: resolved });
+      window.setTimeout(() => {
+        setPileBanner((current) => (current?.text === text ? null : current));
+      }, duration);
+    },
+    []
+  );
 
   const showEventBannerFromMessage = useCallback(
     (text: string) => {
@@ -822,7 +830,11 @@ export default function GameTable() {
         if (match?.[1]) {
           const actor =
             match[1].toUpperCase() === 'YOU' ? 'YOU' : match[1].toUpperCase();
-          showPileBanner(actor === 'YOU' ? 'YOU PICK UP' : `${actor} PICKS UP`);
+          showPileBanner(
+            actor === 'YOU' ? 'YOU PICK UP' : `${actor} PICKS UP`,
+            1400,
+            'pickup'
+          );
           return;
         }
       }
@@ -830,18 +842,23 @@ export default function GameTable() {
       if (upper.includes('WON THE ROUND')) {
         const match = normalized.match(/^(.+?) won the round/i);
         if (match?.[1]) {
-          showPileBanner(`${match[1].toUpperCase()} WINS ROUND`, 2200);
+          showPileBanner(`${match[1].toUpperCase()} WINS ROUND`, 2200, 'win');
           return;
         }
       }
 
       if (upper.includes('CLEAR')) {
-        showPileBanner('CLEAR!', 1300);
+        showPileBanner('CLEAR!', 1300, 'clear');
         return;
       }
 
       if (upper.includes('BAD FLIP')) {
-        showPileBanner('BAD FLIP!', 1300);
+        showPileBanner('BAD FLIP!', 1300, 'bad');
+        return;
+      }
+
+      if (upper.includes('FLIPPED')) {
+        showPileBanner('FLIPPED!', 1200, 'flip');
       }
     },
     [showPileBanner]
@@ -981,9 +998,9 @@ export default function GameTable() {
       setPendingState(null);
 
       if (result.badFlip) {
-        showPileBanner('BAD FLIP!', 1300);
+        showPileBanner('BAD FLIP!', 1300, 'bad');
       } else if (result.cleared) {
-        showPileBanner('CLEAR!', 1300);
+        showPileBanner('CLEAR!', 1300, 'clear');
       } else {
         showEventBannerFromMessage(result.message);
       }
@@ -1502,6 +1519,26 @@ export default function GameTable() {
     );
   };
 
+  const handlePickUp = () => {
+    if (!localPlayer || isAnimating) return;
+    if (!canPickUpPile(state, localPlayer.id)) return;
+
+    if (mode === 'online') {
+      online.sendPickUp();
+      setSelectedKeys(new Set());
+      return;
+    }
+
+    const previousId = localPlayer.id;
+    const next = pickUpPile(state, localPlayer.id);
+    if (next === state) return;
+
+    setState(next);
+    setMessage(turnHandoffMessage(next, previousId));
+    setSelectedKeys(new Set());
+    showPileBanner('PICK UP', 1300, 'pickup');
+  };
+
   const syncSetupState = (
     count: number,
     nextMode: GameMode,
@@ -1675,6 +1712,16 @@ export default function GameTable() {
         ? `${displayName(nextContinuePlayer)} — CONTINUE (${roundContinueCount}/${roundContinueRequired})`
         : 'CONTINUE';
 
+  const actionHint = actionHintForTurn(state, isLocalTurn, !!roundReveal);
+  const turnChipLabel =
+    currentPlayer && isLocalTurn
+      ? 'Your turn'
+      : currentPlayer
+        ? `${displayName(currentPlayer)}'s turn`
+        : '';
+  const canPickUp =
+    !!localPlayer && canPickUpPile(state, localPlayer.id) && !isAnimating;
+
   return (
     <div
       className="game-felt"
@@ -1847,6 +1894,12 @@ export default function GameTable() {
           </button>
         </div>
 
+        {state.phase === 'playing' && !roundReveal && currentPlayer && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <TurnChip label={turnChipLabel} isYours={isLocalTurn} />
+          </div>
+        )}
+
         {state.phase === 'setup' && (
           <p style={{ textAlign: 'center', opacity: 0.85, marginTop: 40 }}>
             Use the setup dialog above to choose mode and players, then start.
@@ -1892,7 +1945,10 @@ export default function GameTable() {
                   spreadCards={spreadRoundCards}
                 />
               ) : (
-              <SeatBlock player={top}>
+              <SeatBlock
+                player={top}
+                isActiveTurn={top?.id === state.currentPlayerId && !roundReveal}
+              >
                 {top && (
                   <div
                     style={{
@@ -1935,7 +1991,10 @@ export default function GameTable() {
 
             {showLeft && (
               <div ref={leftAreaRef} style={{ position: 'relative' }}>
-                <SeatBlock player={left}>
+                <SeatBlock
+                  player={left}
+                  isActiveTurn={left?.id === state.currentPlayerId && !roundReveal}
+                >
                   {left && (
                     <div
                       style={{
@@ -2042,37 +2101,28 @@ export default function GameTable() {
                 )}
 
                 {pileBanner && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      padding: '12px 22px',
-                      borderRadius: 12,
-                      background: 'rgba(0, 0, 0, 0.82)',
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      color: 'white',
-                      fontWeight: 900,
-                      fontSize: 24,
-                      letterSpacing: 0.6,
-                      textTransform: 'uppercase',
-                      whiteSpace: 'nowrap',
-                      zIndex: 30,
-                      pointerEvents: 'none',
-                      boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
-                    }}
-                  >
-                    {pileBanner}
-                  </div>
+                  <PileBannerOverlay
+                    text={pileBanner.text}
+                    variant={pileBanner.variant}
+                  />
                 )}
               </div>
 
-              <div style={{ fontSize: 13, textAlign: 'center', maxWidth: 360 }}>
-                {roundReveal
-                  ? roundReveal.roundMessage
-                  : normalizeMessage(message)}
-              </div>
+              {roundReveal ? (
+                <MessageBar
+                  message={roundReveal.roundMessage}
+                  hint={
+                    !roundReveal.revealComplete
+                      ? 'Reviewing leftover cards…'
+                      : 'Everyone must continue before the next deal.'
+                  }
+                />
+              ) : (
+                <MessageBar
+                  message={normalizeMessage(message)}
+                  hint={actionHint}
+                />
+              )}
 
               {roundReveal && (
                 <button
@@ -2092,7 +2142,10 @@ export default function GameTable() {
 
             {showRight && (
               <div ref={rightAreaRef} style={{ position: 'relative' }}>
-                <SeatBlock player={right}>
+                <SeatBlock
+                  player={right}
+                  isActiveTurn={right?.id === state.currentPlayerId && !roundReveal}
+                >
                   {right && (
                     <div
                       style={{
@@ -2132,7 +2185,10 @@ export default function GameTable() {
 
             <div />
             <div ref={bottomAreaRef} style={{ position: 'relative' }}>
-              <SeatBlock player={bottom}>
+              <SeatBlock
+                player={bottom}
+                isActiveTurn={bottom?.id === state.currentPlayerId && !roundReveal}
+              >
                 <div
                   style={{
                     display: 'flex',
@@ -2294,20 +2350,36 @@ export default function GameTable() {
                       </button>
                       <button
                         type="button"
-                        disabled={!isLocalTurn || state.turnRank === null || isAnimating}
+                        disabled={!canPickUp}
+                        onClick={handlePickUp}
+                        style={btnStyle(canPickUp)}
+                      >
+                        PICK UP
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canEndTurn(state, bottom.id) || isAnimating}
                         onClick={() => {
                           if (mode === 'online') {
                             online.sendEndTurn();
                             setSelectedKeys(new Set());
                             return;
                           }
-                          setState(endTurn(state, bottom.id));
-                          setMessage('Turn ended.');
+                          const previousId = bottom.id;
+                          const next = endTurn(state, bottom.id);
+                          if (next === state) {
+                            setMessage(
+                              'You must play, flip, or overplay before ending your turn.'
+                            );
+                            return;
+                          }
+                          setState(next);
+                          setMessage(turnHandoffMessage(next, previousId));
                           setSelectedKeys(new Set());
                         }}
                         style={{
                           ...btnStyle(
-                            isLocalTurn && state.turnRank !== null && !isAnimating
+                            canEndTurn(state, bottom.id) && !isAnimating
                           ),
                           whiteSpace: 'nowrap',
                           minWidth: 96,

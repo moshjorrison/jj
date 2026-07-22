@@ -14,6 +14,7 @@ export type ClientMessage =
   | { type: 'play'; picks: CardPick[] }
   | { type: 'flip'; index: number }
   | { type: 'endTurn' }
+  | { type: 'pickUp' }
   | { type: 'overplay'; pick: CardPick }
   | { type: 'tiebreaker' }
   | { type: 'newGame' }

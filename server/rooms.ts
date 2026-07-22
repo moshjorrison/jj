@@ -4,6 +4,7 @@ import {
   checkRoundEnd,
   endTurn,
   flipFaceDown,
+  pickUpPile,
   playCards,
   playIntentionalOverplay,
   startGame,
@@ -310,8 +311,28 @@ export function handleClientMessage(
   }
 
   if (message.type === 'endTurn') {
-    room.gameState = endTurn(room.gameState, playerId)
+    const previous = room.gameState
+    const next = endTurn(room.gameState, playerId)
+    if (next === previous) {
+      sendError(ws, 'You must play, flip, or overplay before ending your turn.')
+      return
+    }
+    room.gameState = next
     broadcastGame(room, 'Turn ended.')
+    return
+  }
+
+  if (message.type === 'pickUp') {
+    const previous = room.gameState
+    const player = room.gameState.players.find((p) => p.id === playerId)
+    const next = pickUpPile(room.gameState, playerId)
+    if (next === previous) {
+      sendError(ws, 'You cannot pick up the pile right now.')
+      return
+    }
+    room.gameState = next
+    const name = player?.name ?? 'Player'
+    applyRoundEnd(room, `${name} picked up the pile.`)
     return
   }
 
