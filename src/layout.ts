@@ -6,6 +6,8 @@ export type LayoutSizes = {
   handCardWidth: number
   handCardHeight: number
   handCardsPerRow: number
+  handRowWidth: number
+  bottomTableWidth: number
   opponentCardWidth: number
   opponentCardHeight: number
   opponentHandStep: number
@@ -54,6 +56,12 @@ export function computeLayout(
     )
   )
   const handCardHeight = snapPx(handCardWidth * CARD_ASPECT)
+  const handRowWidth = snapPx(
+    handCardWidth * HAND_CARDS_PER_ROW + handGap * (HAND_CARDS_PER_ROW - 1)
+  )
+  const bottomTableWidth = snapPx(
+    cardWidth * TABLE_SLOTS + tableGap * (TABLE_SLOTS - 1)
+  )
   const opponentCardWidth = snapPx(30 * scale)
   const opponentCardHeight = snapPx(opponentCardWidth * CARD_ASPECT)
   const opponentHandStep = snapPx(Math.max(9, Math.round(13 * scale)))
@@ -68,6 +76,8 @@ export function computeLayout(
     handCardWidth,
     handCardHeight,
     handCardsPerRow: HAND_CARDS_PER_ROW,
+    handRowWidth,
+    bottomTableWidth,
     opponentCardWidth,
     opponentCardHeight,
     opponentHandStep,

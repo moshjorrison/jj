@@ -120,12 +120,17 @@ export function TurnChip({
 export function MessageBar({
   message,
   hint,
+  maxWidth,
 }: {
   message: string
   hint: string | null
+  maxWidth?: number
 }) {
   return (
-    <div className="message-bar" style={{ width: '100%', maxWidth: 380 }}>
+    <div
+      className="message-bar"
+      style={{ width: '100%', maxWidth: maxWidth ?? 380 }}
+    >
       <div
         key={message}
         className="message-bar-text"
@@ -160,10 +165,14 @@ export function MessageBar({
 export function PileBannerOverlay({
   text,
   variant,
+  maxWidth,
 }: {
   text: string
   variant: PileBannerVariant
+  maxWidth?: number
 }) {
+  const wraps = maxWidth !== undefined
+
   return (
     <div
       className={`pile-banner pile-banner--${variant}`}
@@ -172,14 +181,17 @@ export function PileBannerOverlay({
         top: '50%',
         left: '50%',
         transform: 'translate3d(-50%, -50%, 0)',
-        padding: '12px 22px',
+        padding: wraps ? '10px 14px' : '12px 22px',
         borderRadius: 14,
         color: 'white',
         fontWeight: 900,
-        fontSize: 22,
+        fontSize: wraps ? 18 : 22,
         letterSpacing: 0.8,
         textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
+        whiteSpace: wraps ? 'normal' : 'nowrap',
+        textAlign: 'center',
+        lineHeight: 1.15,
+        maxWidth: maxWidth,
         zIndex: 30,
         pointerEvents: 'none',
         ...sharpText,

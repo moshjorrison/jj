@@ -1413,6 +1413,7 @@ export default function GameTable() {
                   <PileBannerOverlay
                     text={pileBanner.text}
                     variant={pileBanner.variant}
+                    maxWidth={layout.bottomTableWidth}
                   />
                 )}
               </div>
@@ -1420,6 +1421,7 @@ export default function GameTable() {
               {roundReveal ? (
                 <MessageBar
                   message={roundReveal.roundMessage}
+                  maxWidth={layout.handRowWidth}
                   hint={
                     !roundReveal.revealComplete
                       ? reviewingLeftoverCardsHint()
@@ -1430,6 +1432,7 @@ export default function GameTable() {
                 <MessageBar
                   message={normalizeMessage(message)}
                   hint={actionHint}
+                  maxWidth={layout.handRowWidth}
                 />
               )}
 
