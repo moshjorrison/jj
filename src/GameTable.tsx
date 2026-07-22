@@ -11,7 +11,6 @@ import {
   SeatPointsBanner,
   TableCards,
 } from './gameTable/TableComponents';
-import { MobileGameBoard } from './gameTable/MobileGameBoard';
 import { TurnTimer } from './gameTable/TurnTimer';
 import type {
   FlyingCard,
@@ -914,10 +913,6 @@ export default function GameTable() {
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
-  const mobileOpponents = bottom
-    ? opponentsFromView(tablePlayers, bottom.id)
-    : []
-
   const cardsPerHandRow = layout.isMobile ? 6 : 5
   const handRowCount = layout.isMobile ? 2 : 3
   const bottomHandRows = bottom
@@ -1146,35 +1141,6 @@ export default function GameTable() {
             >
               J&amp;J
             </div>
-            {layout.isMobile && showTable ? (
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '2px 8px',
-                  fontSize: 10,
-                  opacity: 0.8,
-                  marginTop: 2,
-                }}
-              >
-                {(roundReveal?.pendingFinalState.players ?? state.players).map(
-                  (p) => (
-                    <span
-                      key={p.id}
-                      style={{
-                        color:
-                          p.id === (localPlayer?.id ?? state.currentPlayerId)
-                            ? '#60a5fa'
-                            : undefined,
-                        opacity: disconnectedIds.includes(p.id) ? 0.45 : 1,
-                      }}
-                    >
-                      {displayName(p)}:{p.score}
-                    </span>
-                  )
-                )}
-              </div>
-            ) : (
             <div
               style={{
                 fontSize: 12,
@@ -1189,7 +1155,6 @@ export default function GameTable() {
                   ? 'Online'
                   : 'vs AI'}
             </div>
-            )}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
@@ -1267,77 +1232,7 @@ export default function GameTable() {
           </p>
         )}
 
-        {showTable && bottom && layout.isMobile && (
-          <MobileGameBoard
-            state={state}
-            bottom={bottom}
-            opponents={mobileOpponents}
-            message={normalizeMessage(message)}
-            roundReveal={roundReveal}
-            pileBanner={pileBanner}
-            selectedKeys={selectedKeys}
-            isLocalTurn={isLocalTurn}
-            isAnimating={isAnimating}
-            canOverplaySelected={canOverplaySelected}
-            canEndTurn={canEndTurn(state, bottom.id)}
-            selectedPickCount={selectedPicks.length}
-            spreadRoundCards={spreadRoundCards}
-            disconnectedIds={disconnectedIds}
-            pileAreaRef={pileAreaRef}
-            bottomAreaRef={bottomAreaRef}
-            getRevealFlags={getRevealFlags}
-            canPressContinue={canPressContinue}
-            continueButtonLabel={continueButtonLabel}
-            onCardTap={handleCardTap}
-            onCardDoubleClick={handleCardDoubleClick}
-            onFaceDownFlip={(idx) => {
-              if (isAnimating) return;
-              if (mode === 'online') {
-                online.sendFlip(idx);
-                return;
-              }
-              const flippedCard = bottom.faceDown[idx];
-              if (!flippedCard) return;
-              const result = flipFaceDown(state, bottom.id, idx);
-              if (!result) return;
-              const added = cardsAddedToPile(
-                state.activePile,
-                result.state.activePile
-              );
-              const cardsToAnimate =
-                added.length > 0 ? added : [flippedCard];
-              animateResolvedResult(
-                cardsToAnimate,
-                bottom.seat,
-                result,
-                flippedCard
-              );
-            }}
-            onPlay={handlePlay}
-            onOverplay={handleOverplay}
-            onEndTurn={() => {
-              if (mode === 'online') {
-                online.sendEndTurn();
-                setSelectedKeys(new Set());
-                return;
-              }
-              const previousId = bottom.id;
-              const next = endTurn(state, bottom.id);
-              if (next === state) {
-                setMessage(
-                  'You must play, flip, or overplay before ending your turn.'
-                );
-                return;
-              }
-              setState(next);
-              setMessage(turnHandoffMessage(next, previousId));
-              setSelectedKeys(new Set());
-            }}
-            onContinueRound={handleContinueAfterRoundReveal}
-          />
-        )}
-
-        {showTable && bottom && !layout.isMobile && (
+        {showTable && bottom && (
           <div
             style={{
               display: 'grid',
