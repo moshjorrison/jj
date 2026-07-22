@@ -1024,7 +1024,6 @@ export default function GameTable() {
   );
 
   const onlineRoundEndKeyRef = useRef<string | null>(null);
-  const prevOnlinePileRef = useRef<Card[]>([]);
 
   const animateResolvedResult = useCallback(
     (
@@ -1525,35 +1524,36 @@ export default function GameTable() {
     ).length > 1;
 
   const useExpandedTable = state.playerCount > MAX_LOCAL_PLAYERS;
+  const tablePlayers = pendingState?.players ?? state.players;
   const showLeft = !useExpandedTable && state.playerCount >= 3;
   const showRight = !useExpandedTable && state.playerCount === 4;
   const opponents =
     useExpandedTable && localPlayer
-      ? opponentsFromView(state.players, localPlayer.id)
+      ? opponentsFromView(tablePlayers, localPlayer.id)
       : [];
   const top = playerAtDisplay(
-    state.players,
+    tablePlayers,
     'top',
     viewSeat,
     state.playerCount
   );
   const left = playerAtDisplay(
-    state.players,
+    tablePlayers,
     'left',
     viewSeat,
     state.playerCount
   );
   const right = playerAtDisplay(
-    state.players,
+    tablePlayers,
     'right',
     viewSeat,
     state.playerCount
   );
   const bottom =
     useExpandedTable && localPlayer
-      ? localPlayer
-      : playerAtDisplay(state.players, 'bottom', viewSeat, state.playerCount) ??
-        state.players[0];
+      ? tablePlayers.find((p) => p.id === localPlayer.id) ?? localPlayer
+      : playerAtDisplay(tablePlayers, 'bottom', viewSeat, state.playerCount) ??
+        tablePlayers[0];
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
@@ -1966,51 +1966,6 @@ export default function GameTable() {
                 }}
               >
                 <ActivePile pile={state.activePile} />
-
-                {flipPreview && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 10,
-                      zIndex: 28,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <div
-                      style={{
-                        transform: 'scale(1.15)',
-                        filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.45))',
-                      }}
-                    >
-                      <CardFace
-                        card={flipPreview}
-                        width={layout.cardWidth}
-                        height={layout.cardHeight}
-                      />
-                    </div>
-                    {(flipPreview.rank === 'J' || flipPreview.rank === 'Joker') && (
-                      <div
-                        style={{
-                          padding: '6px 14px',
-                          borderRadius: 999,
-                          background: 'rgba(250, 204, 21, 0.95)',
-                          color: '#111827',
-                          fontWeight: 900,
-                          fontSize: 14,
-                          letterSpacing: 0.8,
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {flipPreview.rank === 'Joker' ? 'Joker!' : 'Jack!'}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {pileBanner && (
                   <PileBannerOverlay
