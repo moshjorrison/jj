@@ -9,7 +9,7 @@ A browser-based implementation of **J&J** — a shedding card game for 2–4 pla
 - **2–4 players** with two standard decks (jokers in 4-player games)
 - **VS AI** — play against computer opponents
 - **Hot-seat** — pass the device between players
-- **Online** — play across phones/computers with room codes (2–12 players)
+- **Online** — play across phones/computers with room codes (4–10 players)
 - Full rules in-app, plus [RULES.md](./RULES.md) in the repo
 - Animated plays, round scoring, and game-over screen
 
