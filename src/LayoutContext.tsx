@@ -10,18 +10,22 @@ import { computeLayout, type LayoutSizes } from './layout'
 
 const LayoutContext = createContext<LayoutSizes | null>(null)
 
-function getViewportWidth() {
-  return window.visualViewport?.width ?? window.innerWidth
+function getViewportSize() {
+  const vv = window.visualViewport
+  return {
+    width: vv?.width ?? window.innerWidth,
+    height: vv?.height ?? window.innerHeight,
+  }
 }
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
-  const [width, setWidth] = useState(() => getViewportWidth())
+  const [viewport, setViewport] = useState(() => getViewportSize())
   const [isTouch, setIsTouch] = useState(
     () => window.matchMedia('(pointer: coarse)').matches
   )
 
   useEffect(() => {
-    const update = () => setWidth(getViewportWidth())
+    const update = () => setViewport(getViewportSize())
     const vv = window.visualViewport
     vv?.addEventListener('resize', update)
     vv?.addEventListener('scroll', update)
@@ -43,8 +47,8 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const layout = useMemo(
-    () => computeLayout(width, isTouch),
-    [width, isTouch]
+    () => computeLayout(viewport.width, viewport.height, isTouch),
+    [viewport.width, viewport.height, isTouch]
   )
 
   return (
@@ -57,6 +61,7 @@ export function useLayout(): LayoutSizes {
   if (!layout) {
     return computeLayout(
       typeof window !== 'undefined' ? window.innerWidth : 390,
+      typeof window !== 'undefined' ? window.innerHeight : 700,
       false
     )
   }

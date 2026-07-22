@@ -421,13 +421,8 @@ export function canEndTurn(state: GameState, playerId: string): boolean {
   return state.currentPlayerId === playerId && state.turnRank !== null
 }
 
-export function canPickUpPile(state: GameState, playerId: string): boolean {
-  return (
-    state.currentPlayerId === playerId &&
-    state.phase === 'playing' &&
-    state.activePile.length > 0 &&
-    (state.turnRank !== null || state.formTurnUsed)
-  )
+export function canPickUpPile(_state: GameState, _playerId: string): boolean {
+  return false
 }
 
 export function endTurn(state: GameState, playerId: string): GameState {

@@ -28,15 +28,16 @@ body {
 }
 
 #root {
-  min-height: 100vh;
-  min-height: 100dvh;
-  min-height: -webkit-fill-available;
+  height: 100vh;
+  height: 100dvh;
+  height: -webkit-fill-available;
   width: 100%;
   max-width: none;
   margin: 0;
   padding: 0;
   border: none;
   text-align: initial;
+  overflow: hidden;
 }
 
 button,
@@ -58,11 +59,19 @@ button {
       transparent 58%
     ),
     radial-gradient(circle at center, #14532d 0%, #0f3d22 58%, #0b2a18 100%);
+  height: 100dvh;
+  height: -webkit-fill-available;
+  overflow: hidden;
 }
 
 .game-board {
   position: relative;
   isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .game-board::after {
@@ -173,6 +182,10 @@ button {
 }
 
 @media (pointer: coarse) {
+  .game-felt button {
+    min-height: 36px;
+  }
+
   button:active:not(:disabled) {
     transform: scale(0.97);
     transition: transform 0.08s ease;

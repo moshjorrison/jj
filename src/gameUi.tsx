@@ -32,7 +32,31 @@ export function turnHandoffMessage(state: GameState, previousPlayerId: string) {
   if (next.id === previousPlayerId) {
     return 'Clear! Play again with any card.'
   }
-  return `${displayPossessive(next)} turn — select cards to play.`
+  return turnStartMessage(next)
+}
+
+export function turnStartMessage(player: Player) {
+  return `${displayPossessive(player)} turn — select cards to play.`
+}
+
+export function reviewingCardsLabel() {
+  return 'Reviewing cards…'
+}
+
+export function continueRoundLabel(
+  player: Player,
+  count: number,
+  required: number
+) {
+  return `${displayName(player)} — CONTINUE (${count}/${required})`
+}
+
+export function tiebreakerMessage() {
+  return 'Tiebreaker round — lowest score deals first.'
+}
+
+export function reviewingLeftoverCardsHint() {
+  return 'Reviewing leftover cards…'
 }
 
 export function actionHintForTurn(
@@ -43,7 +67,7 @@ export function actionHintForTurn(
   if (!isLocalTurn || roundReveal || state.phase !== 'playing') return null
 
   if (state.turnRank !== null) {
-    return `Locked to ${state.turnRank}s — add more, end turn, or pick up the pile.`
+    return `Locked to ${state.turnRank}s — add more or end turn.`
   }
 
   if (state.activePile.length === 0) {

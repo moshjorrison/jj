@@ -30,11 +30,16 @@ import {
   PileBannerOverlay,
   TurnChip,
   actionHintForTurn,
+  continueRoundLabel,
   displayName,
   displayPossessive,
   normalizeMessage,
   pileBannerVariant,
+  reviewingCardsLabel,
+  reviewingLeftoverCardsHint,
+  tiebreakerMessage,
   turnHandoffMessage,
+  turnStartMessage,
   type PileBannerVariant,
 } from './gameUi';
 import { runAiStep } from './ai';
@@ -66,11 +71,9 @@ import {
 import {
   checkRoundEnd,
   canEndTurn,
-  canPickUpPile,
   createSetupState,
   endTurn,
   flipFaceDown,
-  pickUpPile,
   playCards,
   playIntentionalOverplay,
   startGame,
@@ -803,26 +806,6 @@ export default function GameTable() {
     );
   };
 
-  const handlePickUp = () => {
-    if (!localPlayer || isAnimating) return;
-    if (!canPickUpPile(state, localPlayer.id)) return;
-
-    if (mode === 'online') {
-      online.sendPickUp();
-      setSelectedKeys(new Set());
-      return;
-    }
-
-    const previousId = localPlayer.id;
-    const next = pickUpPile(state, localPlayer.id);
-    if (next === state) return;
-
-    setState(next);
-    setMessage(turnHandoffMessage(next, previousId));
-    setSelectedKeys(new Set());
-    showPileBanner('PICK UP', 1300, 'pickup');
-  };
-
   const syncSetupState = (
     count: number,
     nextMode: GameMode,
@@ -836,7 +819,7 @@ export default function GameTable() {
     const next = startGame(setupCount, setupMode, names);
     setState(next);
     const first = next.players[0];
-    setMessage(`${displayPossessive(first)} turn â€” select cards to play.`);
+    setMessage(turnStartMessage(first));
     setSelectedKeys(new Set());
     setShowPassBanner(setupMode === 'hotSeat');
   };
@@ -930,13 +913,21 @@ export default function GameTable() {
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
+  const cardsPerHandRow = layout.isMobile ? 6 : 5
+  const handRowCount = layout.isMobile ? 2 : 3
   const bottomHandRows = bottom
-    ? [
-        bottom.hand.slice(0, 5).map((card, i) => ({ card, handIndex: i })),
-        bottom.hand.slice(5, 10).map((card, i) => ({ card, handIndex: i + 5 })),
-        bottom.hand.slice(10).map((card, i) => ({ card, handIndex: i + 10 })),
-      ]
-    : [[], [], []]
+    ? (() => {
+        const entries = bottom.hand.map((card, i) => ({ card, handIndex: i }))
+        const rows: (typeof entries)[] = []
+        for (let i = 0; i < entries.length; i += cardsPerHandRow) {
+          rows.push(entries.slice(i, i + cardsPerHandRow))
+        }
+        while (rows.length < handRowCount) {
+          rows.push([])
+        }
+        return rows
+      })()
+    : Array.from({ length: handRowCount }, () => [] as { card: Card; handIndex: number }[])
 
   const revealEntryById = new Map(
     (roundReveal?.players ?? []).map((entry) => [entry.playerId, entry])
@@ -988,36 +979,42 @@ export default function GameTable() {
       ? !!localPlayer && !localHasContinued
       : !!nextContinuePlayerId);
   const continueButtonLabel = !roundReveal?.revealComplete
-    ? 'Reviewing cardsâ€¦'
+    ? reviewingCardsLabel()
     : mode === 'online'
       ? localHasContinued
         ? `Waiting ${roundContinueCount}/${roundContinueRequired}`
         : 'CONTINUE'
       : nextContinuePlayer
-        ? `${displayName(nextContinuePlayer)} â€” CONTINUE (${roundContinueCount}/${roundContinueRequired})`
+        ? continueRoundLabel(
+            nextContinuePlayer,
+            roundContinueCount,
+            roundContinueRequired
+          )
         : 'CONTINUE';
 
-  const actionHint = actionHintForTurn(state, isLocalTurn, !!roundReveal);
+  const actionHint = layout.isMobile
+    ? null
+    : actionHintForTurn(state, isLocalTurn, !!roundReveal);
   const turnChipLabel =
     currentPlayer && isLocalTurn
       ? 'Your turn'
       : currentPlayer
         ? `${displayName(currentPlayer)}'s turn`
         : '';
-  const canPickUp =
-    !!localPlayer && canPickUpPile(state, localPlayer.id) && !isAnimating;
 
   return (
     <div
       className="game-felt"
       style={{
-        minHeight: '100dvh',
+        height: '100dvh',
         color: 'white',
         padding:
-          'max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(max(6px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(6px, env(safe-area-inset-left))',
+          'max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(max(4px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(4px, env(safe-area-inset-left))',
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
-        overflowX: 'hidden',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
         ...sharpText,
       }}
     >
@@ -1103,7 +1100,7 @@ export default function GameTable() {
               return;
             }
             setState(startTiebreakerRound(state));
-            setMessage('Tiebreaker round â€” lowest score deals first.');
+            setMessage(tiebreakerMessage());
             setSelectedKeys(new Set());
           }}
         />
@@ -1117,6 +1114,11 @@ export default function GameTable() {
           maxWidth: layout.boardMaxWidth,
           margin: '0 auto',
           position: 'relative',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
         }}
       >
         <div
@@ -1124,7 +1126,7 @@ export default function GameTable() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: layout.isMobile ? 8 : 6,
+            marginBottom: layout.isMobile ? 4 : 6,
             gap: 8,
           }}
         >
@@ -1210,7 +1212,7 @@ export default function GameTable() {
               justifyContent: 'center',
               alignItems: 'center',
               gap: 10,
-              marginBottom: 8,
+              marginBottom: layout.isMobile ? 4 : 8,
             }}
           >
             <TurnChip label={turnChipLabel} isYours={isLocalTurn} />
@@ -1237,9 +1239,12 @@ export default function GameTable() {
                 ? `${layout.sideColumnWidth}px 1fr ${layout.sideColumnWidth}px`
                 : '1fr',
               gridTemplateRows: 'auto auto auto auto',
-              gap: layout.isMobile ? 4 : 8,
+              gap: layout.isMobile ? 2 : 8,
               alignItems: 'center',
               justifyItems: 'center',
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
             }}
           >
             {showLeft && <div />}
@@ -1250,7 +1255,7 @@ export default function GameTable() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 10,
+                gap: layout.isMobile ? 4 : 10,
                 position: 'relative',
               }}
             >
@@ -1258,6 +1263,7 @@ export default function GameTable() {
                 players={roundReveal?.pendingFinalState.players ?? state.players}
                 currentId={localPlayer?.id ?? state.currentPlayerId}
                 disconnectedIds={disconnectedIds}
+                compact={layout.isMobile}
               />
               {state.lastRoundDeltas && !roundReveal && (
                 <RoundScoreRecap
@@ -1368,16 +1374,18 @@ export default function GameTable() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 16,
+                gap: layout.isMobile ? 6 : 16,
               }}
             >
-              <div style={{ fontWeight: 700 }}>Active pile</div>
+              {!layout.isMobile && (
+                <div style={{ fontWeight: 700 }}>Active pile</div>
+              )}
 
               <div
                 ref={pileAreaRef}
                 style={{
                   position: 'relative',
-                  minHeight: layout.cardHeight + 24,
+                  minHeight: layout.cardHeight + (layout.isMobile ? 8 : 24),
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1399,7 +1407,7 @@ export default function GameTable() {
                   message={roundReveal.roundMessage}
                   hint={
                     !roundReveal.revealComplete
-                      ? 'Reviewing leftover cardsâ€¦'
+                      ? reviewingLeftoverCardsHint()
                       : 'Everyone must continue before the next deal.'
                   }
                 />
@@ -1480,7 +1488,7 @@ export default function GameTable() {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 20,
+                    gap: layout.isMobile ? 10 : 20,
                     width: '100%',
                     position: 'relative',
                   }}
@@ -1538,7 +1546,7 @@ export default function GameTable() {
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: 8,
+                      gap: layout.isMobile ? 4 : 8,
                       paddingBottom: 4,
                       width: '100%',
                     }}
@@ -1602,7 +1610,7 @@ export default function GameTable() {
                         flexWrap: 'wrap',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        marginTop: 8,
+                        marginTop: layout.isMobile ? 4 : 8,
                         width: '100%',
                         padding: '0 4px',
                       }}
@@ -1633,14 +1641,6 @@ export default function GameTable() {
                         style={btnStyle(canOverplaySelected)}
                       >
                         OVERPLAY
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!canPickUp}
-                        onClick={handlePickUp}
-                        style={btnStyle(canPickUp)}
-                      >
-                        PICK UP
                       </button>
                       <button
                         type="button"
