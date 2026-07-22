@@ -883,6 +883,14 @@ export default function GameTable() {
   const tablePlayers = pendingState?.players ?? state.players;
   const showLeft = !useExpandedTable && state.playerCount >= 3;
   const showRight = !useExpandedTable && state.playerCount === 4;
+  const mobileGridSpan =
+    layout.isMobile && (showLeft || showRight)
+      ? ({
+          gridColumn: '1 / -1',
+          justifySelf: 'center',
+          width: '100%',
+        } as const)
+      : undefined;
   const opponents =
     useExpandedTable && localPlayer
       ? opponentsFromView(tablePlayers, localPlayer.id)
@@ -913,8 +921,8 @@ export default function GameTable() {
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
-  const cardsPerHandRow = layout.isMobile ? 6 : 5
-  const handRowCount = layout.isMobile ? 2 : 3
+  const cardsPerHandRow = layout.handCardsPerRow
+  const handRowCount = 2
   const bottomHandRows = bottom
     ? (() => {
         const entries = bottom.hand.map((card, i) => ({ card, handIndex: i }))
@@ -1119,15 +1127,19 @@ export default function GameTable() {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          alignItems: layout.isMobile ? 'center' : undefined,
         }}
       >
         <div
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
+            justifyContent: layout.isMobile ? 'center' : 'space-between',
             alignItems: 'center',
+            flexDirection: layout.isMobile ? 'column' : 'row',
+            textAlign: layout.isMobile ? 'center' : undefined,
             marginBottom: layout.isMobile ? 4 : 6,
-            gap: 8,
+            gap: layout.isMobile ? 6 : 8,
+            width: '100%',
           }}
         >
           <div style={{ minWidth: 0 }}>
@@ -1243,9 +1255,11 @@ export default function GameTable() {
               gap: layout.isMobile ? 2 : 8,
               alignItems: 'center',
               justifyItems: 'center',
+              justifyContent: 'center',
               flex: 1,
               minHeight: 0,
               overflow: 'hidden',
+              width: '100%',
             }}
           >
             {showLeft && <div />}
@@ -1258,6 +1272,7 @@ export default function GameTable() {
                 alignItems: 'center',
                 gap: layout.isMobile ? 4 : 10,
                 position: 'relative',
+                ...mobileGridSpan,
               }}
             >
               <ScorePanel
@@ -1376,6 +1391,7 @@ export default function GameTable() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: layout.isMobile ? 6 : 16,
+                ...mobileGridSpan,
               }}
             >
               {!layout.isMobile && (
@@ -1479,7 +1495,7 @@ export default function GameTable() {
             )}
 
             <div />
-            <div ref={bottomAreaRef} style={{ position: 'relative' }}>
+            <div ref={bottomAreaRef} style={{ position: 'relative', ...mobileGridSpan }}>
               <SeatBlock
                 player={bottom}
                 isActiveTurn={bottom?.id === state.currentPlayerId && !roundReveal}
@@ -1492,6 +1508,7 @@ export default function GameTable() {
                     gap: layout.isMobile ? 10 : 20,
                     width: '100%',
                     position: 'relative',
+                    margin: '0 auto',
                   }}
                 >
                   <TableCards
@@ -1549,7 +1566,9 @@ export default function GameTable() {
                       alignItems: 'center',
                       gap: layout.isMobile ? 4 : 8,
                       paddingBottom: 4,
-                      width: '100%',
+                      width: layout.handRowWidth,
+                      maxWidth: '100%',
+                      margin: '0 auto',
                     }}
                   >
                     {bottomHandRows.map((row, rowIndex) =>
@@ -1571,8 +1590,8 @@ export default function GameTable() {
                               <CardFace
                                 key={key}
                                 card={card}
-                                width={layout.cardWidth}
-                                height={layout.cardHeight}
+                                width={layout.handCardWidth}
+                                height={layout.handCardHeight}
                                 selected={selectedKeys.has(key)}
                                 faded={
                                   !isLocalTurn ||

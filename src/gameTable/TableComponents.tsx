@@ -519,7 +519,7 @@ export function OpponentStrip({
         style={{
           display: 'flex',
           gap: 10,
-          justifyContent: 'flex-start',
+          justifyContent: 'center',
           minWidth: 'min-content',
           padding: '0 4px',
         }}
