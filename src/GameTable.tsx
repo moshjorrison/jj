@@ -1272,7 +1272,6 @@ export default function GameTable() {
             state={state}
             bottom={bottom}
             opponents={mobileOpponents}
-            topOpponent={mobileOpponents.length === 1 ? top : undefined}
             message={normalizeMessage(message)}
             roundReveal={roundReveal}
             pileBanner={pileBanner}

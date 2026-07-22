@@ -4,7 +4,6 @@ import { useLayout } from '../LayoutContext'
 import {
   MessageBar,
   PileBannerOverlay,
-  displayName,
   reviewingLeftoverCardsHint,
   type PileBannerVariant,
 } from '../gameUi'
@@ -13,7 +12,7 @@ import type { Card, CardPick, GameState, Player } from '../types'
 import { actionButtonStyle } from './buttonStyles'
 import {
   ActivePile,
-  OpponentHand,
+  OpponentStrip,
   TableCards,
 } from './TableComponents'
 import type { RevealFlags, RoundRevealState } from './types'
@@ -22,7 +21,6 @@ type MobileGameBoardProps = {
   state: GameState
   bottom: Player
   opponents: Player[]
-  topOpponent?: Player
   message: string
   roundReveal: RoundRevealState | null
   pileBanner: { text: string; variant: PileBannerVariant } | null
@@ -122,44 +120,10 @@ function HandFan({
   )
 }
 
-function OpponentChip({
-  player,
-  isActive,
-  disconnected,
-}: {
-  player: Player
-  isActive: boolean
-  disconnected: boolean
-}) {
-  return (
-    <div
-      style={{
-        flex: '0 0 auto',
-        padding: '3px 10px',
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: isActive ? 700 : 500,
-        whiteSpace: 'nowrap',
-        border: isActive
-          ? '1px solid rgba(251,191,36,0.7)'
-          : '1px solid rgba(255,255,255,0.14)',
-        background: isActive
-          ? 'rgba(251,191,36,0.12)'
-          : 'rgba(255,255,255,0.06)',
-        opacity: disconnected ? 0.45 : 1,
-      }}
-    >
-      {displayName(player)}
-      {disconnected ? ' ○' : ''} · {player.hand.length}
-    </div>
-  )
-}
-
 export function MobileGameBoard({
   state,
   bottom,
   opponents,
-  topOpponent,
   message,
   roundReveal,
   pileBanner,
@@ -186,52 +150,19 @@ export function MobileGameBoard({
 }: MobileGameBoardProps) {
   const layout = useLayout()
   const bottomReveal = getRevealFlags(bottom)
-  const topReveal = topOpponent ? getRevealFlags(topOpponent) : null
-  const twoPlayer = opponents.length === 1 && topOpponent
 
   return (
     <div className="mobile-board">
       <div className="mobile-board__opponents">
-        {twoPlayer && topOpponent && topReveal ? (
-          <div className="mobile-board__opponent-detail">
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                opacity: 0.85,
-                flexShrink: 0,
-              }}
-            >
-              {displayName(topOpponent)}
-            </span>
-            <OpponentHand
-              player={topOpponent}
-              display="top"
-              revealCards={topReveal.revealHand}
-              spreadCards={spreadRoundCards && topReveal.revealHand}
-            />
-            <TableCards
-              player={topOpponent}
-              display="top"
-              isBottom={false}
-              selectedKeys={new Set()}
-              turnRank={state.turnRank}
-              isPlayerTurn={false}
-              revealFaceDown={topReveal.revealFaceDown}
-              spreadCards={spreadRoundCards && topReveal.revealFaceDown}
-            />
-          </div>
-        ) : (
-          <div className="mobile-board__opponent-chips">
-            {opponents.map((player) => (
-              <OpponentChip
-                key={player.id}
-                player={player}
-                isActive={player.id === state.currentPlayerId && !roundReveal}
-                disconnected={disconnectedIds.includes(player.id)}
-              />
-            ))}
-          </div>
+        {opponents.length > 0 && (
+          <OpponentStrip
+            opponents={opponents}
+            turnRank={state.turnRank}
+            currentPlayerId={state.currentPlayerId}
+            getRevealFlags={getRevealFlags}
+            spreadCards={spreadRoundCards}
+            disconnectedIds={disconnectedIds}
+          />
         )}
       </div>
 
