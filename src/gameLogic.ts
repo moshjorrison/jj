@@ -87,6 +87,55 @@ export function isClear(pile: Card[], played: Card[]): boolean {
   return checkFourOfAKind(pile)
 }
 
+export function isFourOfAKindClear(pile: Card[], played: Card[]): boolean {
+  if (played.length === 0) return false
+  const topPlayed = played[played.length - 1]
+  if (isSpecialClear(topPlayed)) return false
+  return checkFourOfAKind(pile)
+}
+
+export function unincludedMatchingPicks(
+  player: Player,
+  picks: CardPick[],
+  rank: Rank
+): CardPick[] {
+  const pickedKeys = new Set(picks.map((p) => `${p.zone}:${p.index}`))
+  const extras: CardPick[] = []
+
+  player.hand.forEach((card, index) => {
+    if (card.rank !== rank) return
+    const pick = { zone: 'hand' as const, index }
+    if (!pickedKeys.has(`${pick.zone}:${pick.index}`)) {
+      extras.push(pick)
+    }
+  })
+
+  player.faceUp.forEach((card, index) => {
+    if (!card || card.rank !== rank) return
+    const pick = { zone: 'faceUp' as const, index }
+    if (!pickedKeys.has(`${pick.zone}:${pick.index}`)) {
+      extras.push(pick)
+    }
+  })
+
+  return extras
+}
+
+export function clearWouldLeaveMatchingCards(
+  state: { activePile: Card[]; turnRank: Rank | null },
+  player: Player,
+  picks: CardPick[],
+  cards: Card[]
+): boolean {
+  if (cards.length === 0) return false
+
+  const nextPile = [...state.activePile, ...cards]
+  if (!isFourOfAKindClear(nextPile, cards)) return false
+
+  const rank = state.turnRank ?? cards[0].rank
+  return unincludedMatchingPicks(player, picks, rank).length > 0
+}
+
 export function isFaceDownAvailable(
   player: Pick<Player, 'faceUp'>,
   faceDownIndex: number

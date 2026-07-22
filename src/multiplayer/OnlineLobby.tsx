@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { OnlineSession } from './useOnlineGame'
 import { getWsUrl } from './protocol'
-import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../constants'
+import { MAX_ONLINE_PLAYERS, MIN_ONLINE_PLAYERS } from '../constants'
 
 type OnlineLobbyProps = {
   session: OnlineSession
@@ -188,18 +188,21 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
             {mode === 'create' ? (
               <>
                 <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
-                  Max players ({MIN_PLAYERS}–{MAX_ONLINE_PLAYERS})
+                  Max players ({MIN_ONLINE_PLAYERS}–{MAX_ONLINE_PLAYERS})
                 </label>
                 <input
                   type="number"
-                  min={MIN_PLAYERS}
+                  min={MIN_ONLINE_PLAYERS}
                   max={MAX_ONLINE_PLAYERS}
                   value={playerCount}
                   onChange={(e) => {
                     const next = Number(e.target.value)
                     if (Number.isNaN(next)) return
                     setPlayerCount(
-                      Math.min(MAX_ONLINE_PLAYERS, Math.max(MIN_PLAYERS, next))
+                      Math.min(
+                        MAX_ONLINE_PLAYERS,
+                        Math.max(MIN_ONLINE_PLAYERS, next)
+                      )
                     )
                   }}
                   style={fieldStyle}
@@ -317,12 +320,13 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
             {session.isHost ? (
               <button
                 type="button"
-                disabled={session.players.length < 2}
+                disabled={session.players.length < MIN_ONLINE_PLAYERS}
                 onClick={() => session.startGame()}
                 style={{
                   ...btnStyle,
                   width: '100%',
-                  opacity: session.players.length < 2 ? 0.5 : 1,
+                  opacity:
+                    session.players.length < MIN_ONLINE_PLAYERS ? 0.5 : 1,
                 }}
               >
                 Start game

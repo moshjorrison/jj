@@ -15,9 +15,9 @@ export const AI_STEP_DELAY_MS = 800
 export const HAND_END_DELAY_MS = 1800
 export const ROUND_END_DELAY_MS = 3000
 
-/** Pause to show a flipped face-down card before it flies to the pile. */
-export const FLIP_REVEAL_MS = 1500
-export const FLIP_REVEAL_JACK_MS = 2800
+/** Fly animation duration when a face-down card is flipped onto the pile. */
+export const FLIP_FLY_MS = 520
+export const FLIP_FLY_JACK_MS = 900
 
 /** Staggered round-end reveal (losers' leftover cards + score banners). */
 export const ROUND_REVEAL_START_MS = 900
@@ -46,4 +46,5 @@ export const CARDS_PER_PLAYER = 19
 export const CARDS_PER_DECK = 54
 export const MIN_PLAYERS = 2
 export const MAX_LOCAL_PLAYERS = 4
-export const MAX_ONLINE_PLAYERS = 12
+export const MIN_ONLINE_PLAYERS = 4
+export const MAX_ONLINE_PLAYERS = 10

@@ -1,5 +1,4 @@
 import type { Card, CardPick, GameState } from '../types'
-import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../constants'
 
 export type LobbyPlayer = {
   id: string

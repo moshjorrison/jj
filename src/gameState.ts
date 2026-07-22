@@ -2,6 +2,7 @@ import { WIN_SCORE } from './constants'
 import { collectCardsForReshuffle, dealCards } from './deck'
 import {
   canPlay,
+  clearWouldLeaveMatchingCards,
   flippedCardIsTooHigh,
   isClear,
   isFaceDownAvailable,
@@ -142,6 +143,7 @@ export type PlayResult = {
   cleared: boolean
   badFlip: boolean
   message: string
+  blocked?: boolean
 }
 
 function resolvePicks(player: Player, picks: CardPick[]): Card[] {
@@ -184,6 +186,19 @@ function clearStateAfterPlay(state: GameState): GameState {
   }
 }
 
+const CLEAR_SELECT_ALL_MESSAGE =
+  'Select all matching cards before clearing the pile.'
+
+function blockedClearResult(state: GameState): PlayResult {
+  return {
+    state,
+    cleared: false,
+    badFlip: false,
+    message: CLEAR_SELECT_ALL_MESSAGE,
+    blocked: true,
+  }
+}
+
 function applyMidTurnPlay(
   state: GameState,
   playerId: string,
@@ -191,6 +206,10 @@ function applyMidTurnPlay(
   picks: CardPick[],
   source: 'hand' | 'faceUp' | 'faceDown' | 'mixed'
 ): PlayResult {
+  if (clearWouldLeaveMatchingCards(state, getPlayer(state, playerId), picks, cards)) {
+    return blockedClearResult(state)
+  }
+
   const next = updatePlayer(state, playerId, (p) => removePicks(p, picks))
   const nextPile = [...state.activePile, ...cards]
   const nextState = {
@@ -327,6 +346,10 @@ export function playCards(
       const nextPile = [...state.activePile, ...fullPlayed]
 
       if (isClear(nextPile, fullPlayed)) {
+        if (clearWouldLeaveMatchingCards(state, player, picks, fullPlayed)) {
+          return blockedClearResult(state)
+        }
+
         if (extraPicks.length > 0) {
           next = updatePlayer(next, playerId, (p) => removePicks(p, extraPicks))
         }

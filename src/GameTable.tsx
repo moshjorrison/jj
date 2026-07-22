@@ -17,8 +17,8 @@ import { runAiStep } from './ai';
 import { CardBack, CardFace, EmptySlot, cardFaceRotation } from './cardUi';
 import {
   AI_STEP_DELAY_MS,
-  FLIP_REVEAL_JACK_MS,
-  FLIP_REVEAL_MS,
+  FLIP_FLY_JACK_MS,
+  FLIP_FLY_MS,
   HAND_END_DELAY_MS,
   MAX_LOCAL_PLAYERS,
   ROUND_END_DELAY_MS,
@@ -69,6 +69,7 @@ type PlayLikeResult = {
   message: string;
   cleared?: boolean;
   badFlip?: boolean;
+  blocked?: boolean;
 };
 
 type FlyingCard = {
@@ -104,9 +105,9 @@ type RoundRevealState = {
   requiredPlayerIds: string[];
 };
 
-function flipRevealDelayMs(card: Card): number {
-  if (card.rank === 'J' || card.rank === 'Joker') return FLIP_REVEAL_JACK_MS;
-  return FLIP_REVEAL_MS;
+function flipFlyDurationMs(card: Card): number {
+  if (card.rank === 'J' || card.rank === 'Joker') return FLIP_FLY_JACK_MS;
+  return FLIP_FLY_MS;
 }
 
 function requiredContinuePlayerIds(
@@ -762,7 +763,6 @@ export default function GameTable() {
   const [flyingCards, setFlyingCards] = useState<FlyingCard[]>([]);
   const [pendingState, setPendingState] = useState<GameState | null>(null);
   const [roundReveal, setRoundReveal] = useState<RoundRevealState | null>(null);
-  const [flipPreview, setFlipPreview] = useState<Card | null>(null);
 
   const boardRef = useRef<HTMLDivElement | null>(null);
   const pileAreaRef = useRef<HTMLDivElement | null>(null);
@@ -797,8 +797,7 @@ export default function GameTable() {
   const isAnimating =
     flyingCards.length > 0 ||
     pendingState !== null ||
-    roundReveal !== null ||
-    flipPreview !== null;
+    roundReveal !== null;
 
   const getSeatRef = useCallback((seat: Seat) => {
     if (seat === 'bottom') return bottomAreaRef;
@@ -1001,6 +1000,10 @@ export default function GameTable() {
         showPileBanner('BAD FLIP!', 1300, 'bad');
       } else if (result.cleared) {
         showPileBanner('CLEAR!', 1300, 'clear');
+      } else if (/Flipped Joker/i.test(result.message)) {
+        showPileBanner('JOKER!', 1300, 'flip');
+      } else if (/Flipped J\b/i.test(result.message)) {
+        showPileBanner('JACK!', 1300, 'flip');
       } else {
         showEventBannerFromMessage(result.message);
       }
@@ -1011,6 +1014,10 @@ export default function GameTable() {
   const applyResult = useCallback(
     (result: PlayLikeResult | null) => {
       if (!result) return;
+      if (result.blocked) {
+        setMessage(normalizeMessage(result.message));
+        return;
+      }
       finalizeResolvedResult(result);
     },
     [finalizeResolvedResult]
@@ -1030,8 +1037,20 @@ export default function GameTable() {
       const pileRect = pileAreaRef.current?.getBoundingClientRect();
       const fromRect = getSeatRef(fromSeat).current?.getBoundingClientRect();
 
+      const flipCard =
+        revealFlipCard ??
+        (result.message.includes('Flipped') || result.badFlip
+          ? cards[0] ?? null
+          : null);
+      const isFlipPlay = flipCard !== null;
+      const durationMs = isFlipPlay ? flipFlyDurationMs(flipCard) : 360;
+
+      setPendingState(result.state);
+      setSelectedKeys(new Set());
+
       const runFlyAnimation = () => {
         if (!boardRect || !pileRect || !fromRect || cards.length === 0) {
+          setFlyingCards([]);
           finalizeResolvedResult(result);
           return;
         }
@@ -1043,8 +1062,7 @@ export default function GameTable() {
 
         const count = cards.length;
         const fanSpacing = 10;
-        const staggerMs = 40;
-        const durationMs = 360;
+        const staggerMs = isFlipPlay ? 0 : 40;
         const startRotation = seatRotation(fromSeat);
 
         const overlayCards: FlyingCard[] = cards.map((card, index) => {
@@ -1065,8 +1083,6 @@ export default function GameTable() {
           };
         });
 
-        setPendingState(result.state);
-        setSelectedKeys(new Set());
         setFlyingCards(overlayCards);
 
         const totalMs = durationMs + (count - 1) * staggerMs + 30;
@@ -1080,25 +1096,6 @@ export default function GameTable() {
           finalizeResolvedResult(result);
         }, totalMs);
       };
-
-      const flipCard =
-        revealFlipCard ??
-        (result.message.includes('Flipped') || result.badFlip
-          ? cards[0] ?? null
-          : null);
-
-      if (flipCard) {
-        setFlipPreview(flipCard);
-        const delay = flipRevealDelayMs(flipCard);
-        if (animationTimerRef.current) {
-          window.clearTimeout(animationTimerRef.current);
-        }
-        animationTimerRef.current = window.setTimeout(() => {
-          setFlipPreview(null);
-          runFlyAnimation();
-        }, delay);
-        return;
-      }
 
       runFlyAnimation();
     },
@@ -1165,32 +1162,6 @@ export default function GameTable() {
       rd.displayState.players.map((p) => p.id)
     );
   }, [online.roundEnd, setupMode, startRoundRevealSequence]);
-
-  useEffect(() => {
-    if (mode !== 'online' || roundReveal) {
-      prevOnlinePileRef.current = state.activePile;
-      return;
-    }
-
-    const msg = online.message ?? '';
-    const isFlipMsg = msg.includes('Flipped') || msg.includes('Bad flip');
-    if (!isFlipMsg) {
-      prevOnlinePileRef.current = state.activePile;
-      return;
-    }
-
-    const added = cardsAddedToPile(prevOnlinePileRef.current, state.activePile);
-    prevOnlinePileRef.current = state.activePile;
-    if (added.length === 0) return;
-
-    const flipCard = added[0];
-    setFlipPreview(flipCard);
-    const timer = window.setTimeout(
-      () => setFlipPreview(null),
-      flipRevealDelayMs(flipCard)
-    );
-    return () => window.clearTimeout(timer);
-  }, [mode, online.message, state.activePile, roundReveal]);
 
   useEffect(() => {
     if (state.phase !== 'playing' || mode !== 'ai' || isAnimating) return;
@@ -1341,6 +1312,15 @@ export default function GameTable() {
       const picks = picksOverride ?? selectedPicks;
       if (picks.length === 0) return;
 
+      const preview = playCards(state, localPlayer.id, picks);
+      if (preview?.blocked) {
+        setMessage(normalizeMessage(preview.message));
+        if (picksOverride) {
+          setSelectedKeys(new Set(picksOverride.map((p) => pickKey(p))));
+        }
+        return;
+      }
+
       if (mode === 'online') {
         online.sendPlay(picks);
         setSelectedKeys(new Set());
@@ -1352,7 +1332,7 @@ export default function GameTable() {
 
       const playedCards = resolveCardsFromPicks(actor, picks);
       const result = playCards(state, localPlayer.id, picks);
-      if (!result) return;
+      if (!result || result.blocked) return;
 
       const added = cardsAddedToPile(state.activePile, result.state.activePile);
       const cardsToAnimate = added.length > 0 ? added : playedCards;
@@ -1390,85 +1370,17 @@ export default function GameTable() {
         .map(parsePickKey)
         .filter((p): p is CardPick => p !== null);
 
-      const singleResult = playCards(state, localPlayer.id, nextPicks);
-      if (!singleResult) {
+      const preview = playCards(state, localPlayer.id, nextPicks);
+      if (!preview) {
         if (!alreadySelected) {
           toggleSelect(pick, card);
         }
         return;
       }
 
-      const forceAddOnClearRanks = new Set<Rank>([
-        'A',
-        '2',
-        '3',
-        '4',
-        '5',
-        '6',
-        '7',
-        '8',
-        '9',
-        '10',
-        'Q',
-        'K',
-      ]);
-
-      const shouldForceAddOnClear = forceAddOnClearRanks.has(card.rank);
-
-      const totalMatchingCardsAvailable = (() => {
-        const selectedKeySet = new Set(next);
-        const rankToMatch = state.turnRank ?? card.rank;
-        let total = nextPicks.length;
-
-        for (let i = 0; i < localPlayer.hand.length; i++) {
-          const candidate = localPlayer.hand[i];
-          const candidatePick: CardPick = { zone: 'hand', index: i };
-          const candidateKey = pickKey(candidatePick);
-
-          if (selectedKeySet.has(candidateKey)) continue;
-          if (!candidate) continue;
-          if (candidate.rank !== rankToMatch) continue;
-
-          const testResult = playCards(state, localPlayer.id, [
-            ...nextPicks,
-            candidatePick,
-          ]);
-          if (testResult) {
-            total += 1;
-          }
-        }
-
-        for (let i = 0; i < localPlayer.faceUp.length; i++) {
-          const candidate = localPlayer.faceUp[i];
-          if (!candidate) continue;
-
-          const candidatePick: CardPick = { zone: 'faceUp', index: i };
-          const candidateKey = pickKey(candidatePick);
-
-          if (selectedKeySet.has(candidateKey)) continue;
-          if (candidate.rank !== rankToMatch) continue;
-
-          const testResult = playCards(state, localPlayer.id, [
-            ...nextPicks,
-            candidatePick,
-          ]);
-          if (testResult) {
-            total += 1;
-          }
-        }
-
-        return total;
-      })();
-
-      if (
-        shouldForceAddOnClear &&
-        singleResult.cleared &&
-        totalMatchingCardsAvailable >= 4
-      ) {
-        setMessage(
-          'Clear available — select any extra matching cards first, then double-click to play.'
-        );
+      if (preview.blocked) {
         setSelectedKeys(next);
+        setMessage(normalizeMessage(preview.message));
         return;
       }
 

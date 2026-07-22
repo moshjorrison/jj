@@ -12,7 +12,10 @@ import {
   createSetupState,
 } from '../src/gameState.js'
 import type { CardPick, GameState } from '../src/types.js'
-import { MAX_ONLINE_PLAYERS, MIN_PLAYERS } from '../src/constants.js'
+import {
+  MAX_ONLINE_PLAYERS,
+  MIN_ONLINE_PLAYERS,
+} from '../src/constants.js'
 import {
   filterGameStateForPlayer,
   filterGameStateForRoundEnd,
@@ -182,11 +185,16 @@ function handleContinueRound(room: Room, playerId: string) {
 function handlePlayAction(
   room: Room,
   playerId: string,
-  picks: CardPick[]
+  picks: CardPick[],
+  ws: WebSocket
 ) {
   if (!room.gameState) return
   const result = playCards(room.gameState, playerId, picks)
   if (!result) {
+    return
+  }
+  if (result.blocked) {
+    sendError(ws, result.message)
     return
   }
   room.gameState = result.state
@@ -201,7 +209,7 @@ export function handleClientMessage(
   if (message.type === 'create') {
     const count = Math.min(
       MAX_ONLINE_PLAYERS,
-      Math.max(MIN_PLAYERS, message.playerCount)
+      Math.max(MIN_ONLINE_PLAYERS, message.playerCount)
     )
     const name = message.name.trim() || 'Host'
     const code = makeCode()
@@ -259,8 +267,8 @@ export function handleClientMessage(
     }
 
     const seated = lobbyPlayers(room)
-    if (seated.length < 2) {
-      sendError(ws, 'Need at least 2 players to start.')
+    if (seated.length < MIN_ONLINE_PLAYERS) {
+      sendError(ws, `Need at least ${MIN_ONLINE_PLAYERS} players to start.`)
       return
     }
 
@@ -298,7 +306,7 @@ export function handleClientMessage(
   const playerId = conn.playerId
 
   if (message.type === 'play') {
-    handlePlayAction(room, playerId, message.picks)
+    handlePlayAction(room, playerId, message.picks, ws)
     return
   }
 
