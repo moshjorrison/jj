@@ -1219,12 +1219,15 @@ export default function GameTable() {
             style={{
               display: 'grid',
               gridTemplateColumns: showLeft
-                ? `${layout.sideColumnWidth}px 1fr ${layout.sideColumnWidth}px`
+                ? 'auto auto auto'
                 : '1fr',
               gridTemplateRows: 'auto auto auto auto',
-              gap: layout.isMobile ? 4 : 8,
+              rowGap: layout.isMobile ? 4 : 8,
+              columnGap: showLeft ? (layout.isMobile ? 6 : 10) : 0,
               alignItems: 'center',
               justifyItems: 'center',
+              justifyContent: 'center',
+              width: '100%',
             }}
           >
             {showLeft && <div />}
@@ -1315,7 +1318,7 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: 16,
+                        gap: layout.isMobile ? 6 : 10,
                         alignItems: 'center',
                         position: 'relative',
                       }}
@@ -1421,7 +1424,7 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: 16,
+                        gap: layout.isMobile ? 6 : 10,
                         alignItems: 'center',
                         position: 'relative',
                       }}
