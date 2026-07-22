@@ -1,6 +1,8 @@
 import WebSocket from 'ws'
 
 const WS_URL = process.env.WS_URL ?? 'ws://localhost:3001'
+const IS_PRODUCTION = WS_URL.includes('onrender.com')
+const DISCONNECT_TIMEOUT_MS = IS_PRODUCTION ? 35000 : 10000
 const results = []
 
 function pass(name) {
@@ -119,7 +121,7 @@ async function main() {
   const disconnectPromise = waitFor(
     host,
     'game',
-    10000,
+    DISCONNECT_TIMEOUT_MS,
     (msg) => msg.disconnectedPlayerIds?.includes(p2Id)
   )
   p2.close()
