@@ -22,9 +22,6 @@ export function RoundScoreRecap({ players, deltas }: RoundScoreRecapProps) {
         border: '1px solid rgba(255,255,255,0.12)',
         fontSize: 12,
         lineHeight: 1.5,
-        textAlign: 'center',
-        marginLeft: 'auto',
-        marginRight: 'auto',
       }}
     >
       <div style={{ fontWeight: 800, marginBottom: 4, opacity: 0.7 }}>

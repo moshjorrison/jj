@@ -883,14 +883,6 @@ export default function GameTable() {
   const tablePlayers = pendingState?.players ?? state.players;
   const showLeft = !useExpandedTable && state.playerCount >= 3;
   const showRight = !useExpandedTable && state.playerCount === 4;
-  const mobileGridSpan =
-    layout.isMobile && (showLeft || showRight)
-      ? ({
-          gridColumn: '1 / -1',
-          justifySelf: 'center',
-          width: '100%',
-        } as const)
-      : undefined;
   const opponents =
     useExpandedTable && localPlayer
       ? opponentsFromView(tablePlayers, localPlayer.id)
@@ -921,21 +913,13 @@ export default function GameTable() {
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
-  const cardsPerHandRow = layout.handCardsPerRow
-  const handRowCount = 2
   const bottomHandRows = bottom
-    ? (() => {
-        const entries = bottom.hand.map((card, i) => ({ card, handIndex: i }))
-        const rows: (typeof entries)[] = []
-        for (let i = 0; i < entries.length; i += cardsPerHandRow) {
-          rows.push(entries.slice(i, i + cardsPerHandRow))
-        }
-        while (rows.length < handRowCount) {
-          rows.push([])
-        }
-        return rows
-      })()
-    : Array.from({ length: handRowCount }, () => [] as { card: Card; handIndex: number }[])
+    ? [
+        bottom.hand.slice(0, 5).map((card, i) => ({ card, handIndex: i })),
+        bottom.hand.slice(5, 10).map((card, i) => ({ card, handIndex: i + 5 })),
+        bottom.hand.slice(10).map((card, i) => ({ card, handIndex: i + 10 })),
+      ]
+    : [[], [], []]
 
   const revealEntryById = new Map(
     (roundReveal?.players ?? []).map((entry) => [entry.playerId, entry])
@@ -1000,9 +984,7 @@ export default function GameTable() {
           )
         : 'CONTINUE';
 
-  const actionHint = layout.isMobile
-    ? null
-    : actionHintForTurn(state, isLocalTurn, !!roundReveal);
+  const actionHint = actionHintForTurn(state, isLocalTurn, !!roundReveal);
   const turnChipLabel =
     currentPlayer && isLocalTurn
       ? 'Your turn'
@@ -1014,15 +996,13 @@ export default function GameTable() {
     <div
       className="game-felt"
       style={{
-        height: '100dvh',
+        minHeight: '100dvh',
         color: 'white',
         padding:
-          'max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(max(4px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(4px, env(safe-area-inset-left))',
+          'max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(max(6px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(6px, env(safe-area-inset-left))',
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
+        overflowX: 'hidden',
         ...sharpText,
       }}
     >
@@ -1122,33 +1102,23 @@ export default function GameTable() {
           maxWidth: layout.boardMaxWidth,
           margin: '0 auto',
           position: 'relative',
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          alignItems: layout.isMobile ? 'center' : undefined,
         }}
       >
         <div
           style={{
             display: 'flex',
-            justifyContent: layout.isMobile ? 'center' : 'space-between',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            flexDirection: layout.isMobile ? 'column' : 'row',
-            textAlign: layout.isMobile ? 'center' : undefined,
-            marginBottom: layout.isMobile ? 4 : 6,
-            gap: layout.isMobile ? 6 : 8,
-            width: '100%',
+            marginBottom: layout.isMobile ? 8 : 6,
+            gap: 8,
           }}
         >
-          <div style={{ minWidth: 0 }}>
+          <div>
             <div
               style={{
-                fontSize: layout.isMobile ? 20 : 22,
+                fontSize: layout.isMobile ? 24 : 22,
                 fontWeight: 800,
                 letterSpacing: -0.3,
-                lineHeight: 1.1,
               }}
             >
               J&amp;J
@@ -1225,7 +1195,7 @@ export default function GameTable() {
               justifyContent: 'center',
               alignItems: 'center',
               gap: 10,
-              marginBottom: layout.isMobile ? 4 : 8,
+              marginBottom: 8,
             }}
           >
             <TurnChip label={turnChipLabel} isYours={isLocalTurn} />
@@ -1252,14 +1222,9 @@ export default function GameTable() {
                 ? `${layout.sideColumnWidth}px 1fr ${layout.sideColumnWidth}px`
                 : '1fr',
               gridTemplateRows: 'auto auto auto auto',
-              gap: layout.isMobile ? 2 : 8,
+              gap: layout.isMobile ? 4 : 8,
               alignItems: 'center',
               justifyItems: 'center',
-              justifyContent: 'center',
-              flex: 1,
-              minHeight: 0,
-              overflow: 'hidden',
-              width: '100%',
             }}
           >
             {showLeft && <div />}
@@ -1270,16 +1235,14 @@ export default function GameTable() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: layout.isMobile ? 4 : 10,
+                gap: 10,
                 position: 'relative',
-                ...mobileGridSpan,
               }}
             >
               <ScorePanel
                 players={roundReveal?.pendingFinalState.players ?? state.players}
                 currentId={localPlayer?.id ?? state.currentPlayerId}
                 disconnectedIds={disconnectedIds}
-                compact={layout.isMobile}
               />
               {state.lastRoundDeltas && !roundReveal && (
                 <RoundScoreRecap
@@ -1390,19 +1353,16 @@ export default function GameTable() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: layout.isMobile ? 6 : 16,
-                ...mobileGridSpan,
+                gap: 16,
               }}
             >
-              {!layout.isMobile && (
-                <div style={{ fontWeight: 700 }}>Active pile</div>
-              )}
+              <div style={{ fontWeight: 700 }}>Active pile</div>
 
               <div
                 ref={pileAreaRef}
                 style={{
                   position: 'relative',
-                  minHeight: layout.cardHeight + (layout.isMobile ? 8 : 24),
+                  minHeight: layout.cardHeight + 24,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1495,7 +1455,7 @@ export default function GameTable() {
             )}
 
             <div />
-            <div ref={bottomAreaRef} style={{ position: 'relative', ...mobileGridSpan }}>
+            <div ref={bottomAreaRef} style={{ position: 'relative' }}>
               <SeatBlock
                 player={bottom}
                 isActiveTurn={bottom?.id === state.currentPlayerId && !roundReveal}
@@ -1505,10 +1465,9 @@ export default function GameTable() {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: layout.isMobile ? 10 : 20,
+                    gap: 20,
                     width: '100%',
                     position: 'relative',
-                    margin: '0 auto',
                   }}
                 >
                   <TableCards
@@ -1564,11 +1523,9 @@ export default function GameTable() {
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: layout.isMobile ? 4 : 8,
+                      gap: 8,
                       paddingBottom: 4,
-                      width: layout.handRowWidth,
-                      maxWidth: '100%',
-                      margin: '0 auto',
+                      width: '100%',
                     }}
                   >
                     {bottomHandRows.map((row, rowIndex) =>
@@ -1590,8 +1547,8 @@ export default function GameTable() {
                               <CardFace
                                 key={key}
                                 card={card}
-                                width={layout.handCardWidth}
-                                height={layout.handCardHeight}
+                                width={layout.cardWidth}
+                                height={layout.cardHeight}
                                 selected={selectedKeys.has(key)}
                                 faded={
                                   !isLocalTurn ||
@@ -1630,7 +1587,7 @@ export default function GameTable() {
                         flexWrap: 'wrap',
                         justifyContent: 'center',
                         alignItems: 'center',
-                        marginTop: layout.isMobile ? 4 : 8,
+                        marginTop: 8,
                         width: '100%',
                         padding: '0 4px',
                       }}

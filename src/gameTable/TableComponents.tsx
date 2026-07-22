@@ -92,8 +92,8 @@ export function TableCards({
   const layout = useLayout()
   const w = isBottom ? layout.cardWidth : layout.opponentCardWidth
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight
-  const overlap = spreadCards ? 0 : isBottom && layout.isMobile ? 6 : 10
-  const slotGap = spreadCards ? 6 : isBottom ? (layout.isMobile ? 3 : 12) : 8
+  const overlap = spreadCards ? 0 : 10
+  const slotGap = spreadCards ? 6 : isBottom ? 12 : 8
   const isVertical = !isBottom && (display === 'left' || display === 'right')
   const rotation = isBottom ? 0 : cardFaceRotation(display)
 
@@ -349,46 +349,11 @@ export function ScorePanel({
   players,
   currentId,
   disconnectedIds = [],
-  compact = false,
 }: {
   players: Player[]
   currentId: string
   disconnectedIds?: string[]
-  compact?: boolean
 }) {
-  if (compact) {
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '4px 10px',
-          justifyContent: 'center',
-          background: 'rgba(255,255,255,0.07)',
-          border: '0.5px solid rgba(255,255,255,0.18)',
-          borderRadius: 8,
-          padding: '4px 10px',
-        }}
-      >
-        {players.map((p) => (
-          <span
-            key={p.id}
-            style={{
-              fontSize: 11,
-              fontWeight: p.id === currentId ? 700 : 500,
-              color: p.id === currentId ? '#60a5fa' : undefined,
-              opacity: disconnectedIds.includes(p.id) ? 0.45 : 1,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {displayName(p)}
-            {disconnectedIds.includes(p.id) ? ' ○' : ''}: {p.score}
-          </span>
-        ))}
-      </div>
-    )
-  }
-
   return (
     <div
       style={{
@@ -519,7 +484,7 @@ export function OpponentStrip({
         style={{
           display: 'flex',
           gap: 10,
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
           minWidth: 'min-content',
           padding: '0 4px',
         }}
