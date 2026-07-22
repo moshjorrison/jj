@@ -13,7 +13,7 @@ function fail(name, err) {
   console.error(`✗ ${name}: ${err}`)
 }
 
-function waitFor(ws, type, timeoutMs = 5000) {
+function waitFor(ws, type, timeoutMs = 5000, predicate = null) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup()
@@ -22,7 +22,7 @@ function waitFor(ws, type, timeoutMs = 5000) {
 
     function onMessage(data) {
       const msg = JSON.parse(data.toString())
-      if (msg.type === type) {
+      if (msg.type === type && (!predicate || predicate(msg))) {
         cleanup()
         resolve(msg)
       } else if (msg.type === 'error') {
@@ -87,7 +87,12 @@ async function main() {
   else fail('four players seated', `count=${lobby4.players.length}`)
 
   host.send(JSON.stringify({ type: 'kick', playerId: lobby4.yourPlayerId }))
-  const lobbyAfterKick = await waitFor(host, 'lobby')
+  const lobbyAfterKick = await waitFor(
+    host,
+    'lobby',
+    8000,
+    (msg) => msg.players.length === 3
+  )
   if (lobbyAfterKick.players.length === 3) pass('host kick removes player')
   else fail('host kick removes player', `count=${lobbyAfterKick.players.length}`)
 
@@ -111,19 +116,31 @@ async function main() {
   if (Array.isArray(game.disconnectedPlayerIds)) pass('disconnected list present')
   else fail('disconnected list present', 'missing')
 
+  const disconnectPromise = waitFor(
+    host,
+    'game',
+    10000,
+    (msg) => msg.disconnectedPlayerIds?.includes(p2Id)
+  )
   p2.close()
-  const gameAfterDisconnect = await waitFor(host, 'game', 8000)
-  if (gameAfterDisconnect.disconnectedPlayerIds?.includes(lobby2.yourPlayerId)) {
+  const gameAfterDisconnect = await disconnectPromise
+  if (gameAfterDisconnect.disconnectedPlayerIds?.includes(p2Id)) {
     pass('disconnect tracked in game state')
   } else {
     fail('disconnect tracked in game state', JSON.stringify(gameAfterDisconnect.disconnectedPlayerIds))
   }
 
   const rejoin = await connect()
+  const rejoinPromise = waitFor(
+    rejoin,
+    'game',
+    10000,
+    (msg) => msg.message?.includes('rejoined')
+  )
   rejoin.send(
     JSON.stringify({ type: 'rejoin', code: roomCode, token: p2Token })
   )
-  const gameRejoin = await waitFor(rejoin, 'game', 8000)
+  const gameRejoin = await rejoinPromise
   if (gameRejoin.message?.includes('rejoined')) pass('rejoin mid-game')
   else fail('rejoin mid-game', gameRejoin.message)
 
