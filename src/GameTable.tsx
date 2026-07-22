@@ -913,13 +913,30 @@ export default function GameTable() {
   const showTable =
     state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
 
+  const mobileBottomSpan =
+    layout.isMobile && showLeft
+      ? ({
+          gridColumn: '1 / -1',
+          width: '100%',
+          justifySelf: 'center',
+        } as const)
+      : undefined
+
   const bottomHandRows = bottom
-    ? [
-        bottom.hand.slice(0, 5).map((card, i) => ({ card, handIndex: i })),
-        bottom.hand.slice(5, 10).map((card, i) => ({ card, handIndex: i + 5 })),
-        bottom.hand.slice(10).map((card, i) => ({ card, handIndex: i + 10 })),
-      ]
-    : [[], [], []]
+    ? (() => {
+        const perRow = layout.handCardsPerRow
+        const entries = bottom.hand.map((card, i) => ({ card, handIndex: i }))
+        const rows: (typeof entries)[] = []
+        for (let i = 0; i < entries.length; i += perRow) {
+          rows.push(entries.slice(i, i + perRow))
+        }
+        const minRows = layout.isMobile ? 2 : 3
+        while (rows.length < minRows) {
+          rows.push([])
+        }
+        return rows
+      })()
+    : Array.from({ length: layout.isMobile ? 2 : 3 }, () => [] as { card: Card; handIndex: number }[])
 
   const revealEntryById = new Map(
     (roundReveal?.players ?? []).map((entry) => [entry.playerId, entry])
@@ -1003,6 +1020,8 @@ export default function GameTable() {
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
         overflowX: 'hidden',
+        overflowY: layout.isMobile ? 'auto' : undefined,
+        WebkitOverflowScrolling: layout.isMobile ? 'touch' : undefined,
         ...sharpText,
       }}
     >
@@ -1458,7 +1477,7 @@ export default function GameTable() {
             )}
 
             <div />
-            <div ref={bottomAreaRef} style={{ position: 'relative' }}>
+            <div ref={bottomAreaRef} style={{ position: 'relative', ...mobileBottomSpan }}>
               <SeatBlock
                 player={bottom}
                 isActiveTurn={bottom?.id === state.currentPlayerId && !roundReveal}
@@ -1468,7 +1487,7 @@ export default function GameTable() {
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 20,
+                    gap: layout.isMobile ? 8 : 20,
                     width: '100%',
                     position: 'relative',
                   }}
@@ -1550,8 +1569,8 @@ export default function GameTable() {
                               <CardFace
                                 key={key}
                                 card={card}
-                                width={layout.cardWidth}
-                                height={layout.cardHeight}
+                                width={layout.handCardWidth}
+                                height={layout.handCardHeight}
                                 selected={selectedKeys.has(key)}
                                 faded={
                                   !isLocalTurn ||

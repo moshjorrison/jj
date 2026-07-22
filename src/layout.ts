@@ -3,6 +3,9 @@ import { snapPx } from './display'
 export type LayoutSizes = {
   cardWidth: number
   cardHeight: number
+  handCardWidth: number
+  handCardHeight: number
+  handCardsPerRow: number
   opponentCardWidth: number
   opponentCardHeight: number
   opponentHandStep: number
@@ -15,6 +18,8 @@ export type LayoutSizes = {
 }
 
 const CARD_ASPECT = 73 / 52
+const TABLE_SLOTS = 4
+const HAND_CARDS_PER_ROW_MOBILE = 6
 
 export function computeLayout(
   viewportWidth: number,
@@ -29,20 +34,43 @@ export function computeLayout(
     ? Math.min(1.04, Math.max(0.82, (viewportWidth - 8) / 375))
     : 1
 
-  const cardWidth = snapPx(54 * scale)
+  const handGap = isMobile ? snapPx(2) : 4
+  const tableGap = isMobile ? snapPx(4) : 12
+
+  const cardWidth = isMobile
+    ? snapPx(
+        Math.min(
+          54 * scale,
+          (boardMaxWidth - tableGap * (TABLE_SLOTS - 1)) / TABLE_SLOTS
+        )
+      )
+    : snapPx(54 * scale)
   const cardHeight = snapPx(cardWidth * CARD_ASPECT)
+
+  const handCardWidth = isMobile
+    ? snapPx(
+        Math.min(
+          cardWidth,
+          (boardMaxWidth - handGap * (HAND_CARDS_PER_ROW_MOBILE - 1)) /
+            HAND_CARDS_PER_ROW_MOBILE
+        )
+      )
+    : cardWidth
+  const handCardHeight = snapPx(handCardWidth * CARD_ASPECT)
   const opponentCardWidth = snapPx(30 * scale)
   const opponentCardHeight = snapPx(opponentCardWidth * CARD_ASPECT)
   const opponentHandStep = snapPx(Math.max(9, Math.round(13 * scale)))
   const rightHandStep = snapPx(Math.max(9, Math.round(13 * scale)))
   const sideColumnWidth = isMobile
-    ? snapPx(Math.max(52, Math.round(76 * scale)))
+    ? snapPx(Math.max(48, Math.round(68 * scale)))
     : 96
-  const handGap = isMobile ? snapPx(3) : 4
 
   return {
     cardWidth,
     cardHeight,
+    handCardWidth,
+    handCardHeight,
+    handCardsPerRow: isMobile ? HAND_CARDS_PER_ROW_MOBILE : 5,
     opponentCardWidth,
     opponentCardHeight,
     opponentHandStep,
