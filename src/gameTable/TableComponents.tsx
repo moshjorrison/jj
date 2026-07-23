@@ -103,7 +103,7 @@ export function TableCards({
     display === 'top'
       ? { top: overlap, left: 0 }
       : display === 'left'
-        ? { top: 0, left: 0 }
+        ? { top: 0, left: overlap }
         : display === 'right'
           ? { top: 0, left: 0 }
           : { top: 0, left: 0 }
@@ -112,7 +112,7 @@ export function TableCards({
     display === 'top'
       ? { top: 0, left: 0 }
       : display === 'left'
-        ? { top: 0, left: overlap }
+        ? { top: 0, left: 0 }
         : display === 'right'
           ? { top: 0, left: overlap }
           : { top: overlap, left: 0 }
