@@ -1407,11 +1407,11 @@ export default function GameTable() {
                 ref={pileAreaRef}
                 style={{
                   position: 'relative',
-                  minHeight: layout.cardHeight + 24,
+                  minHeight: layout.pileCardHeight + 24,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  minWidth: layout.cardWidth + 36,
+                  minWidth: layout.pileCardWidth + 36,
                 }}
               >
                 <ActivePile pile={state.activePile} />

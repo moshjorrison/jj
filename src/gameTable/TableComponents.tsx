@@ -283,8 +283,8 @@ export function TableCards({
 
 export function ActivePile({ pile }: { pile: import('../types').Card[] }) {
   const layout = useLayout()
-  const cardW = layout.cardWidth
-  const cardH = layout.cardHeight
+  const cardW = layout.pileCardWidth
+  const cardH = layout.pileCardHeight
   const overlap = 10
   const maxVisibleWidth = layout.isMobile ? 150 : 180
   const actualOverlap =

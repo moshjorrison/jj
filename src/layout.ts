@@ -1,6 +1,8 @@
 import { snapPx } from './display'
 
 export type LayoutSizes = {
+  pileCardWidth: number
+  pileCardHeight: number
   cardWidth: number
   cardHeight: number
   handCardWidth: number
@@ -25,6 +27,7 @@ export type LayoutSizes = {
 const CARD_ASPECT = 73 / 52
 const TABLE_SLOTS = 4
 const HAND_CARDS_PER_ROW = 7
+const BOTTOM_PLAYER_SCALE = 0.92
 
 export function computeLayout(
   viewportWidth: number,
@@ -42,7 +45,7 @@ export function computeLayout(
   const handGap = isMobile ? snapPx(2) : 4
   const tableGap = isMobile ? snapPx(4) : 12
 
-  const cardWidth = isMobile
+  const pileCardWidth = isMobile
     ? snapPx(
         Math.min(
           54 * scale,
@@ -50,6 +53,9 @@ export function computeLayout(
         )
       )
     : snapPx(54 * scale)
+  const pileCardHeight = snapPx(pileCardWidth * CARD_ASPECT)
+
+  const cardWidth = snapPx(pileCardWidth * BOTTOM_PLAYER_SCALE)
   const cardHeight = snapPx(cardWidth * CARD_ASPECT)
 
   const handCardWidth = snapPx(
@@ -77,6 +83,8 @@ export function computeLayout(
   const sideTablePull = isMobile ? snapPx(16) : snapPx(24)
 
   return {
+    pileCardWidth,
+    pileCardHeight,
     cardWidth,
     cardHeight,
     handCardWidth,
