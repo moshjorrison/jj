@@ -257,7 +257,7 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
                   style={fieldStyle}
                 />
                 <p style={{ margin: '0 0 16px', fontSize: 12, opacity: 0.75 }}>
-                  Decks scale automatically for larger tables.
+                  2-player games always use two decks; larger tables add more decks as needed.
                 </p>
                 <button
                   type="button"

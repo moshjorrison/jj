@@ -46,7 +46,7 @@ export const CARDS_PER_PLAYER = 19
 export const CARDS_PER_DECK = 54
 export const MIN_PLAYERS = 2
 export const MAX_LOCAL_PLAYERS = 4
-export const MIN_ONLINE_PLAYERS = 4
+export const MIN_ONLINE_PLAYERS = 2
 export const MAX_ONLINE_PLAYERS = 10
 
 /** Online turn timer — auto-play when time runs out. */
