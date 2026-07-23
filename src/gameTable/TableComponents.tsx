@@ -97,6 +97,8 @@ export function TableCards({
   const slotGap = spreadCards ? 6 : layout.tableSlotGap
   const rotation = isBottom ? 0 : cardFaceRotation(display)
   const rankScale = isBottom ? 1 : 1.25
+  const stackedAlongMain = w + overlap
+  const stackedAlongCross = h + overlap
 
   const faceDownOffset =
     display === 'top' || display === 'left'
@@ -112,10 +114,9 @@ export function TableCards({
         ? { top: overlap, left: 0 }
         : { top: overlap, left: 0 }
 
-  const containerWidth = w
-
-  const containerHeight =
-    display === 'top' || display === 'bottom' || isVertical ? h + overlap : h
+  const verticalCardStyle = isVertical
+    ? ({ left: '50%', transform: 'translateX(-50%)' } as const)
+    : {}
 
   return (
     <div
@@ -139,22 +140,24 @@ export function TableCards({
         const hasFaceDown = !!faceDownCard
         const faceUpKey = pickKey({ zone: 'faceUp', index: i })
 
-        const slotWidth =
-          spreadCards && hasFaceUp && hasFaceDown
-            ? isVertical
-              ? w
-              : w * 2 + slotGap
-            : hasFaceUp && hasFaceDown
-              ? containerWidth
-              : w
+        const hasStackedPair = hasFaceUp && hasFaceDown
 
-        const slotHeight =
-          spreadCards && hasFaceUp && hasFaceDown
-            ? isVertical
-              ? h * 2 + slotGap
-              : h
-            : hasFaceUp && hasFaceDown
-              ? containerHeight
+        const slotWidth = isVertical
+          ? h
+          : spreadCards && hasStackedPair
+            ? w * 2 + slotGap
+            : w
+
+        const slotHeight = isVertical
+          ? spreadCards && hasStackedPair
+            ? w * 2 + slotGap
+            : hasStackedPair
+              ? stackedAlongMain
+              : w
+          : spreadCards && hasStackedPair
+            ? h
+            : hasStackedPair
+              ? stackedAlongCross
               : h
 
         const slotLayoutStyle = spreadCards
@@ -184,6 +187,7 @@ export function TableCards({
                     : {
                         position: 'absolute',
                         ...faceDownOffset,
+                        ...verticalCardStyle,
                         zIndex: 1,
                       }
                 }
@@ -242,6 +246,7 @@ export function TableCards({
                     : {
                         position: 'absolute',
                         ...faceUpOffset,
+                        ...verticalCardStyle,
                         zIndex: 2,
                       }
                 }
@@ -270,7 +275,21 @@ export function TableCards({
             )}
 
             {!hasFaceUp && !hasFaceDown && (
-              <EmptySlot width={w} height={h} rotation={rotation} />
+              <div
+                style={
+                  isVertical
+                    ? {
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }
+                    : undefined
+                }
+              >
+                <EmptySlot width={w} height={h} rotation={rotation} />
+              </div>
             )}
           </div>
         )
