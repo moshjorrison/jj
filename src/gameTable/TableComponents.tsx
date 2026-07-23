@@ -25,30 +25,41 @@ export function OpponentHand({
   const isVertical = display === 'left' || display === 'right'
   const cardW = layout.opponentCardWidth
   const cardH = layout.opponentCardHeight
-  const step = isVertical ? layout.rightHandStep : layout.opponentHandStep
+  const stackStep = isVertical ? layout.rightHandStep : layout.opponentHandStep
   const spreadGap = 3
   const maxSize = spreadCards ? 2000 : layout.isMobile && isVertical ? 0 : 300
-  const spreadStep = isVertical ? cardH + spreadGap : cardW + spreadGap
+  const spreadStep = isVertical ? cardW + spreadGap : cardW + spreadGap
   const actualStep =
     spreadCards && count > 0
       ? spreadStep
       : count > 1 && maxSize > 0
-        ? Math.min(step, (maxSize - (isVertical ? cardH : cardW)) / (count - 1))
-        : step
+        ? Math.min(
+            stackStep,
+            (maxSize - (isVertical ? cardW : cardW)) / (count - 1)
+          )
+        : stackStep
 
-  const containerW = isVertical ? cardW : cardW + (count - 1) * actualStep
-  const containerH = isVertical ? cardH + (count - 1) * actualStep : cardH
+  const containerW = isVertical
+    ? cardH
+    : cardW + (count - 1) * actualStep
+  const containerH = isVertical
+    ? cardW + (count - 1) * actualStep
+    : cardH
   const rotation = cardFaceRotation(display)
 
   return (
-    <div style={{ position: 'relative', width: containerW, height: containerH }}>
+    <div style={{ position: 'relative', width: containerW, height: containerH, flexShrink: 0 }}>
       {player.hand.map((card, i) => (
         <div
           key={`${card.rank}-${card.suit}-${card.deckId}-${card.jokerColor ?? 'n'}-${i}`}
           style={{
             position: 'absolute',
             ...(isVertical
-              ? { top: i * actualStep, left: 0 }
+              ? {
+                  top: i * actualStep,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                }
               : { left: i * actualStep, top: 0 }),
             zIndex: i,
           }}
@@ -129,6 +140,7 @@ export function TableCards({
         gap: slotGap,
         alignItems: 'center',
         justifyContent: 'center',
+        flexShrink: 0,
       }}
     >
       {Array.from({ length: 4 }).map((_, i) => {

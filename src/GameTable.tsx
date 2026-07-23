@@ -1367,7 +1367,7 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: 0,
+                        gap: layout.sideHandTableGap,
                         alignItems: 'center',
                         justifyContent: layout.isMobile ? 'flex-start' : undefined,
                         width: layout.isMobile ? '100%' : undefined,
@@ -1488,7 +1488,7 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: 0,
+                        gap: layout.sideHandTableGap,
                         alignItems: 'center',
                         justifyContent: layout.isMobile ? 'flex-end' : undefined,
                         width: layout.isMobile ? '100%' : undefined,
