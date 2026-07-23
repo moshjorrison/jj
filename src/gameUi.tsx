@@ -126,10 +126,21 @@ export function MessageBar({
   hint: string | null
   maxWidth?: number
 }) {
+  const wrapStyle = {
+    whiteSpace: 'normal' as const,
+    overflowWrap: 'break-word' as const,
+    wordBreak: 'break-word' as const,
+  }
+
   return (
     <div
       className="message-bar"
-      style={{ width: '100%', maxWidth: maxWidth ?? 380 }}
+      style={{
+        width: '100%',
+        maxWidth: maxWidth ?? 380,
+        marginLeft: 'auto',
+        marginRight: 'auto',
+      }}
     >
       <div
         key={message}
@@ -139,6 +150,7 @@ export function MessageBar({
           fontWeight: 600,
           lineHeight: 1.35,
           textAlign: 'center',
+          ...wrapStyle,
           ...sharpText,
         }}
       >
@@ -152,6 +164,7 @@ export function MessageBar({
             lineHeight: 1.35,
             textAlign: 'center',
             opacity: 0.72,
+            ...wrapStyle,
             ...sharpText,
           }}
         >

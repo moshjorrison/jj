@@ -1428,7 +1428,7 @@ export default function GameTable() {
               {roundReveal ? (
                 <MessageBar
                   message={roundReveal.roundMessage}
-                  maxWidth={layout.handRowWidth}
+                  maxWidth={layout.bottomTableWidth}
                   hint={
                     !roundReveal.revealComplete
                       ? reviewingLeftoverCardsHint()
@@ -1439,7 +1439,7 @@ export default function GameTable() {
                 <MessageBar
                   message={normalizeMessage(message)}
                   hint={actionHint}
-                  maxWidth={layout.handRowWidth}
+                  maxWidth={layout.bottomTableWidth}
                 />
               )}
 
