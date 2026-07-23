@@ -94,37 +94,28 @@ export function TableCards({
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight
   const overlap = spreadCards ? 0 : layout.tableCardOverlap
   const isVertical = !isBottom && (display === 'left' || display === 'right')
-  const slotGap = spreadCards
-    ? 6
-    : isVertical
-      ? layout.sideTableSlotGap
-      : layout.tableSlotGap
+  const slotGap = spreadCards ? 6 : layout.tableSlotGap
   const rotation = isBottom ? 0 : cardFaceRotation(display)
   const rankScale = isBottom ? 1 : 1.25
 
   const faceDownOffset =
-    display === 'top'
+    display === 'top' || display === 'left'
       ? { top: overlap, left: 0 }
-      : display === 'left'
-        ? { top: 0, left: overlap }
-        : display === 'right'
-          ? { top: 0, left: 0 }
-          : { top: 0, left: 0 }
+      : display === 'right'
+        ? { top: 0, left: 0 }
+        : { top: 0, left: 0 }
 
   const faceUpOffset =
-    display === 'top'
+    display === 'top' || display === 'left'
       ? { top: 0, left: 0 }
-      : display === 'left'
-        ? { top: 0, left: 0 }
-        : display === 'right'
-          ? { top: 0, left: overlap }
-          : { top: overlap, left: 0 }
+      : display === 'right'
+        ? { top: overlap, left: 0 }
+        : { top: overlap, left: 0 }
 
-  const containerWidth =
-    display === 'left' || display === 'right' ? w + overlap : w
+  const containerWidth = w
 
   const containerHeight =
-    display === 'top' || display === 'bottom' ? h + overlap : h
+    display === 'top' || display === 'bottom' || isVertical ? h + overlap : h
 
   return (
     <div
