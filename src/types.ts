@@ -64,6 +64,8 @@ export type GameState = {
   turnSource: TurnSource | null
   /** Points added last round (losers only; winner is 0). */
   lastRoundDeltas?: RoundScoreDelta[] | null
+  /** First player to reach this score triggers game over (after the round). */
+  winScore: number
 }
 
 export type CardPick =

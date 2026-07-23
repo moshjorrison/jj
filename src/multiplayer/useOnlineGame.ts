@@ -4,7 +4,7 @@ import {
   getStoredRejoin,
   setStoredRejoin,
 } from '../playerStorage'
-import type { CardPick, GameState } from '../types'
+import { DEFAULT_WIN_SCORE } from '../winScore'
 import { getWsUrl } from './wsUrl'
 import {
   type ClientMessage,
@@ -27,6 +27,7 @@ export type OnlineSession = {
   players: LobbyPlayer[]
   hostId: string | null
   maxPlayers: number
+  winScore: number
   myPlayerId: string | null
   rejoinToken: string | null
   gameState: GameState | null
@@ -35,7 +36,7 @@ export type OnlineSession = {
   wsReady: boolean
   turnDeadline: number | null
   disconnectedPlayerIds: string[]
-  createRoom: (playerCount: number, name: string) => void
+  createRoom: (playerCount: number, name: string, winScore: number) => void
   joinRoom: (code: string, name: string) => void
   startGame: () => void
   sendPlay: (picks: CardPick[]) => void
@@ -106,6 +107,7 @@ export function useOnlineGame(): OnlineSession {
   const [players, setPlayers] = useState<LobbyPlayer[]>([])
   const [hostId, setHostId] = useState<string | null>(null)
   const [maxPlayers, setMaxPlayers] = useState(4)
+  const [winScore, setWinScore] = useState(DEFAULT_WIN_SCORE)
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null)
   const [rejoinToken, setRejoinToken] = useState<string | null>(null)
   const [gameState, setGameState] = useState<GameState | null>(null)
@@ -130,6 +132,7 @@ export function useOnlineGame(): OnlineSession {
       setPlayers(msg.players)
       setHostId(msg.hostId)
       setMaxPlayers(msg.maxPlayers)
+      setWinScore(msg.winScore)
       setMyPlayerId(msg.yourPlayerId)
       setRejoinToken(msg.rejoinToken)
       rejoinTokenRef.current = msg.rejoinToken
@@ -303,8 +306,8 @@ export function useOnlineGame(): OnlineSession {
   )
 
   const createRoom = useCallback(
-    (playerCount: number, name: string) => {
-      send({ type: 'create', playerCount, name })
+    (playerCount: number, name: string, targetWinScore: number) => {
+      send({ type: 'create', playerCount, name, winScore: targetWinScore })
     },
     [send]
   )
@@ -437,6 +440,7 @@ export function useOnlineGame(): OnlineSession {
     players,
     hostId,
     maxPlayers,
+    winScore,
     myPlayerId,
     rejoinToken,
     gameState,

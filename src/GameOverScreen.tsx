@@ -3,6 +3,7 @@ import { getLoserIds, getWinnerIds } from './gameLogic';
 
 type GameOverScreenProps = {
   players: Player[];
+  winScore: number;
   tied: boolean;
   onNewGame: () => void;
   onTiebreaker: () => void;
@@ -10,12 +11,13 @@ type GameOverScreenProps = {
 
 export function GameOverScreen({
   players,
+  winScore,
   tied,
   onNewGame,
   onTiebreaker,
 }: GameOverScreenProps) {
   const winners = getWinnerIds(players);
-  const losers = getLoserIds(players);
+  const losers = getLoserIds(players, winScore);
   const sorted = [...players].sort((a, b) => a.score - b.score);
 
   return (
@@ -67,7 +69,7 @@ export function GameOverScreen({
             {losers.length > 0 && (
               <>
                 {' '}
-                — reached 200:{' '}
+                — reached {winScore}:{' '}
                 {players
                   .filter((p) => losers.includes(p.id))
                   .map((p) => p.name)

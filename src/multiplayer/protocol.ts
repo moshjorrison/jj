@@ -7,7 +7,7 @@ export type LobbyPlayer = {
 }
 
 export type ClientMessage =
-  | { type: 'create'; playerCount: number; name: string }
+  | { type: 'create'; playerCount: number; name: string; winScore?: number }
   | { type: 'join'; code: string; name: string; rejoinToken?: string }
   | { type: 'rejoin'; code: string; token: string }
   | { type: 'start' }
@@ -28,6 +28,7 @@ export type ServerMessage =
       players: LobbyPlayer[]
       hostId: string
       maxPlayers: number
+      winScore: number
       yourPlayerId: string
       rejoinToken: string
     }

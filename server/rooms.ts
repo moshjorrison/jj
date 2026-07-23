@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
 import { runAutoPlayForPlayer } from '../src/ai.js'
+import { DEFAULT_WIN_SCORE, normalizeWinScore } from '../src/winScore.js'
 import {
   DISCONNECT_AUTO_PLAY_MS,
   MAX_ONLINE_PLAYERS,
@@ -53,6 +54,7 @@ type Room = {
   code: string
   hostPlayerId: string
   maxPlayers: number
+  winScore: number
   seats: PlayerSeat[]
   connections: Map<string, Connection>
   gameState: GameState | null
@@ -167,6 +169,7 @@ function lobbyMessage(room: Room, conn: Connection): ServerMessage | null {
     players: lobbyPlayers(room),
     hostId: room.hostPlayerId,
     maxPlayers: room.maxPlayers,
+    winScore: room.winScore,
     yourPlayerId: conn.playerId,
     rejoinToken: seat.token,
   }
@@ -346,6 +349,7 @@ export function handleClientMessage(
       MAX_ONLINE_PLAYERS,
       Math.max(MIN_ONLINE_PLAYERS, message.playerCount)
     )
+    const winScore = normalizeWinScore(message.winScore ?? DEFAULT_WIN_SCORE)
     const name = message.name.trim() || 'Host'
     const code = makeCode()
     const hostSeat: PlayerSeat = {
@@ -360,9 +364,10 @@ export function handleClientMessage(
       code,
       hostPlayerId: 'player-0',
       maxPlayers: count,
+      winScore,
       seats: [hostSeat],
       connections: new Map(),
-      gameState: createSetupState(count, 'online'),
+      gameState: createSetupState(count, 'online', undefined, winScore),
       roundEndPending: null,
       turnDeadline: null,
       turnTimerHandle: null,
@@ -425,7 +430,7 @@ export function handleClientMessage(
     }
 
     const names = seated.map((p) => p.name)
-    room.gameState = startGame(seated.length, 'online', names)
+    room.gameState = startGame(seated.length, 'online', names, room.winScore)
     broadcastGame(room, 'Game started!')
     return
   }

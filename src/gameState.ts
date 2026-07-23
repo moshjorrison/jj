@@ -1,4 +1,4 @@
-import { WIN_SCORE } from './constants'
+import { DEFAULT_WIN_SCORE, normalizeWinScore } from './winScore'
 import { collectCardsForReshuffle, dealCards } from './deck'
 import {
   canPlay,
@@ -33,7 +33,8 @@ function withDisplayName(player: Player): Player {
 export function createSetupState(
   playerCount: number,
   gameMode: GameMode,
-  playerNames?: string[]
+  playerNames?: string[],
+  winScore: number = DEFAULT_WIN_SCORE
 ): GameState {
   const players = createPlayers(playerCount, gameMode, playerNames).map(withDisplayName)
 
@@ -49,13 +50,15 @@ export function createSetupState(
     formTurnUsed: false,
     turnRank: null,
     turnSource: null,
+    winScore: normalizeWinScore(winScore),
   }
 }
 
 export function startGame(
   playerCount: number,
   gameMode: GameMode,
-  playerNames?: string[]
+  playerNames?: string[],
+  winScore: number = DEFAULT_WIN_SCORE
 ): GameState {
   const { hands, faceUps, faceDowns, sideline } = dealCards(playerCount)
 
@@ -80,6 +83,7 @@ export function startGame(
     formTurnUsed: false,
     turnRank: null,
     turnSource: null,
+    winScore: normalizeWinScore(winScore),
   }
 }
 
@@ -489,7 +493,7 @@ export function checkRoundEnd(
     return delta > 0 ? { ...p, score: p.score + delta } : p
   })
 
-  if (updatedPlayers.some((p) => p.score >= WIN_SCORE)) {
+  if (updatedPlayers.some((p) => p.score >= state.winScore)) {
     return {
       state: {
         ...state,

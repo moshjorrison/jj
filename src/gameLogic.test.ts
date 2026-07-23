@@ -138,6 +138,33 @@ describe('gameState', () => {
     }
   })
 
+  it('ends the game when a player reaches winScore', () => {
+    const setup = createSetupState(2, 'ai', undefined, 100)
+    const winner = setup.players[0]
+    const loser = { ...setup.players[1], score: 95 }
+    const state = {
+      ...setup,
+      phase: 'playing' as const,
+      players: [
+        { ...winner, hand: [], faceUp: [], faceDown: [] },
+        {
+          ...loser,
+          hand: [card('5')],
+          faceUp: [],
+          faceDown: [],
+        },
+      ],
+      currentPlayerId: winner.id,
+      turnRank: null,
+      turnSource: null,
+      formTurnUsed: false,
+      activePile: [],
+      sidelinedCards: [],
+    }
+    const result = checkRoundEnd(state)
+    expect(result?.state.phase).toBe('finished')
+  })
+
   it('checkRoundEnd awards points and sets lastRoundDeltas', () => {
     const setup = createSetupState(2, 'ai')
     const winner = setup.players[0]

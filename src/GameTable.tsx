@@ -58,6 +58,7 @@ import {
 import { useLayout } from './LayoutContext';
 import { OnlineLobby } from './multiplayer/OnlineLobby';
 import { useOnlineGame } from './multiplayer/useOnlineGame';
+import { DEFAULT_WIN_SCORE } from './winScore';
 import { GameOverScreen } from './GameOverScreen';
 import { HotSeatBanner } from './HotSeatBanner';
 import { SetupScreen } from './SetupScreen';
@@ -97,6 +98,7 @@ export default function GameTable() {
     () => !!new URLSearchParams(window.location.search).get('room')
   );
   const [setupCount, setSetupCount] = useState(4);
+  const [setupWinScore, setSetupWinScore] = useState(DEFAULT_WIN_SCORE);
   const [setupMode, setSetupMode] = useState<GameMode>('ai');
   const [setupNames, setSetupNames] = useState(() => {
     const names = defaultPlayerNames(4);
@@ -817,14 +819,15 @@ export default function GameTable() {
   const syncSetupState = (
     count: number,
     nextMode: GameMode,
-    names: string[]
+    names: string[],
+    winScore: number = setupWinScore
   ) => {
-    setState(createSetupState(count, nextMode, names));
+    setState(createSetupState(count, nextMode, names, winScore));
   };
 
   const handleStart = () => {
     const names = setupMode === 'hotSeat' ? setupNames : undefined;
-    const next = startGame(setupCount, setupMode, names);
+    const next = startGame(setupCount, setupMode, names, setupWinScore);
     setState(next);
     const first = next.players[0];
     setMessage(turnStartMessage(first));
@@ -837,7 +840,7 @@ export default function GameTable() {
       online.sendNewGame();
       setShowOnlineLobby(true);
     }
-    setState(createSetupState(setupCount, setupMode, setupNames));
+    setState(createSetupState(setupCount, setupMode, setupNames, setupWinScore));
     setMessage('Choose players and start.');
     setSelectedKeys(new Set());
     setShowPassBanner(false);
@@ -1061,24 +1064,29 @@ export default function GameTable() {
           playerCount={setupCount}
           gameMode={setupMode}
           playerNames={setupNames}
+          winScore={setupWinScore}
           onPlayerCountChange={(n) => {
             setSetupCount(n);
             const names = defaultPlayerNames(n).map(
               (label, i) => setupNames[i] ?? label
             );
             setSetupNames(names);
-            syncSetupState(n, setupMode, names);
+            syncSetupState(n, setupMode, names, setupWinScore);
           }}
           onGameModeChange={(nextMode) => {
             setSetupMode(nextMode);
-            syncSetupState(setupCount, nextMode, setupNames);
+            syncSetupState(setupCount, nextMode, setupNames, setupWinScore);
           }}
           onPlayerNameChange={(index, name) => {
             const names = [...setupNames];
             names[index] = name;
             setSetupNames(names);
             if (index === 0) setStoredPlayerName(name);
-            syncSetupState(setupCount, setupMode, names);
+            syncSetupState(setupCount, setupMode, names, setupWinScore);
+          }}
+          onWinScoreChange={(score) => {
+            setSetupWinScore(score);
+            syncSetupState(setupCount, setupMode, setupNames, score);
           }}
           onStart={handleStart}
           onPlayOnline={() => setShowOnlineLobby(true)}
@@ -1108,6 +1116,7 @@ export default function GameTable() {
       {state.phase === 'finished' && !roundReveal && (
         <GameOverScreen
           players={state.players}
+          winScore={state.winScore}
           tied={tiedAtEnd}
           onNewGame={handleNewGame}
           onTiebreaker={() => {

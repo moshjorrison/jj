@@ -4,13 +4,17 @@ import type { GameMode } from './types'
 import { defaultPlayerNames } from './seats'
 import { rulesSections } from './rulesContent'
 
+import { WinScoreField } from './WinScoreField'
+
 type SetupScreenProps = {
   playerCount: number
   gameMode: GameMode
   playerNames: string[]
+  winScore: number
   onPlayerCountChange: (count: number) => void
   onGameModeChange: (mode: GameMode) => void
   onPlayerNameChange: (index: number, name: string) => void
+  onWinScoreChange: (score: number) => void
   onStart: () => void
   onPlayOnline?: () => void
 }
@@ -41,9 +45,11 @@ export function SetupScreen({
   playerCount,
   gameMode,
   playerNames,
+  winScore,
   onPlayerCountChange,
   onGameModeChange,
   onPlayerNameChange,
+  onWinScoreChange,
   onStart,
   onPlayOnline,
 }: SetupScreenProps) {
@@ -144,6 +150,25 @@ export function SetupScreen({
             </button>
           ))}
         </div>
+
+        {gameMode !== 'online' && (
+          <div style={{ marginBottom: 16 }}>
+            <WinScoreField
+              value={winScore}
+              onChange={onWinScoreChange}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(0,0,0,0.2)',
+                color: 'white',
+                fontSize: 16,
+              }}
+            />
+          </div>
+        )}
 
         {gameMode === 'hotSeat' && (
           <div style={{ marginBottom: 20 }}>

@@ -319,6 +319,6 @@ export function getWinnerIds(players: Player[]): string[] {
   return players.filter((p) => p.score === minScore).map((p) => p.id)
 }
 
-export function getLoserIds(players: Player[]): string[] {
-  return players.filter((p) => p.score >= 200).map((p) => p.id)
+export function getLoserIds(players: Player[], winScore: number): string[] {
+  return players.filter((p) => p.score >= winScore).map((p) => p.id)
 }

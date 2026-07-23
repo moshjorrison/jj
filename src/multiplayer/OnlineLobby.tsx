@@ -6,6 +6,8 @@ import {
 } from '../playerStorage'
 import type { OnlineSession } from './useOnlineGame'
 import { getWsUrl } from './wsUrl'
+import { WinScoreField } from '../WinScoreField'
+import { DEFAULT_WIN_SCORE } from '../winScore'
 import { MAX_ONLINE_PLAYERS, MIN_ONLINE_PLAYERS } from '../constants'
 
 type OnlineLobbyProps = {
@@ -75,6 +77,7 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
   const [name, setName] = useState(() => getStoredPlayerName())
   const [joinCode, setJoinCode] = useState(session.roomCode ?? '')
   const [playerCount, setPlayerCount] = useState(4)
+  const [winScore, setWinScore] = useState(DEFAULT_WIN_SCORE)
   const [mode, setMode] = useState<'create' | 'join'>(
     session.roomCode ? 'join' : 'create'
   )
@@ -256,13 +259,18 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
                   }}
                   style={fieldStyle}
                 />
+                <WinScoreField
+                  value={winScore}
+                  onChange={setWinScore}
+                  style={fieldStyle}
+                />
                 <p style={{ margin: '0 0 16px', fontSize: 12, opacity: 0.75 }}>
                   2-player games always use two decks; larger tables add more decks as needed.
                 </p>
                 <button
                   type="button"
                   disabled={!name.trim() || !wsUrl}
-                  onClick={() => session.createRoom(playerCount, name.trim())}
+                  onClick={() => session.createRoom(playerCount, name.trim(), winScore)}
                   style={{
                     ...btnStyle,
                     width: '100%',
@@ -319,6 +327,9 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
               </div>
               <div style={{ fontSize: 32, fontWeight: 900, letterSpacing: 4 }}>
                 {session.roomCode}
+              </div>
+              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 8 }}>
+                Play to {session.winScore} points
               </div>
               {shareUrl && (
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
