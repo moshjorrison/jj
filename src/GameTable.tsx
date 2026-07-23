@@ -1224,7 +1224,10 @@ export default function GameTable() {
               currentId={localPlayer?.id ?? state.currentPlayerId}
               disconnectedIds={disconnectedIds}
             />
-            {state.phase === 'playing' && !roundReveal && currentPlayer && (
+            {state.phase === 'playing' &&
+              !roundReveal &&
+              currentPlayer &&
+              mode !== 'ai' && (
               <div
                 style={{
                   display: 'flex',
