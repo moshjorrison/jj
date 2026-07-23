@@ -1,9 +1,14 @@
 import {
+  clearWouldLeaveMatchingCards,
   getCardScore,
   getRankValue,
+  getTopCard,
+  isClear,
+  isFourOfAKindClear,
   isSpecialClear,
   listLegalPlays,
   listOverplayOptions,
+  unincludedMatchingPicks,
 } from './gameLogic'
 import {
   endTurn,
@@ -117,20 +122,77 @@ function isHighValueBurn(card: Card): boolean {
   return card.rank === 'J' || card.rank === 'Joker'
 }
 
-function getAvailableFaceDownIndex(player: Player): number {
-  return player.faceDown.findIndex((card, idx) => !!card && !player.faceUp[idx])
+function getAvailableFaceDownIndices(player: Player): number[] {
+  return player.faceDown.flatMap((card, idx) =>
+    card && !player.faceUp[idx] ? [idx] : []
+  )
+}
+
+function getTopPileRunLength(pile: Card[]): number {
+  if (pile.length === 0) return 0
+  const top = getTopCard(pile)
+  if (!top || isSpecialClear(top)) return 0
+
+  let count = 0
+  for (let i = pile.length - 1; i >= 0; i -= 1) {
+    if (pile[i].rank !== top.rank) break
+    count += 1
+  }
+  return count
+}
+
+function buildPlayPicks(
+  player: Player,
+  state: GameState,
+  cards: { pick: CardPick; card: Card }[]
+): CardPick[] {
+  let picks = cards.map((x) => x.pick)
+  const played = cards.map((x) => x.card)
+  const rank = played[0]?.rank
+  if (!rank) return picks
+
+  const nextPile = [...state.activePile, ...played]
+  if (isFourOfAKindClear(nextPile, played)) {
+    const extras = unincludedMatchingPicks(player, picks, state.turnRank ?? rank)
+    if (extras.length > 0) picks = [...picks, ...extras]
+  }
+
+  return picks
+}
+
+function isBlockedPlay(
+  player: Player,
+  state: GameState,
+  picks: CardPick[]
+): boolean {
+  const cards = resolveCardsFromPicks(player, picks)
+  if (cards.length !== picks.length) return true
+  return clearWouldLeaveMatchingCards(state, player, picks, cards)
+}
+
+type PlayOption = {
+  picks: CardPick[]
+  cards: Card[]
+  score: number
 }
 
 function scorePlayableRank(
   state: GameState,
   player: Player,
   rank: string,
-  cards: { pick: CardPick; card: Card }[]
+  cards: { pick: CardPick; card: Card }[],
+  resolved: Card[]
 ): number {
-  const cardCount = cards.length
+  const cardCount = resolved.length
   const rankValue = getRankValue(rank as Rank)
   const pilePoints = getPilePointValue(state.activePile)
   const progress = estimateGameProgress(state)
+  const topRun = getTopPileRunLength(state.activePile)
+  const top = getTopCard(state.activePile)
+  const nextPile = [...state.activePile, ...resolved]
+  const wouldClear =
+    resolved.length > 0 &&
+    (isClear(nextPile, resolved) || resolved.some((c) => isSpecialClear(c)))
 
   let score = 0
 
@@ -144,38 +206,106 @@ function scorePlayableRank(
   }
 
   score += cardCount * 55
-  score += rankValue * 3
-  score -= Math.max(0, rankValue) * 2.5
+  score += rankValue * 5
   score += Math.min(pilePoints, 35) * 0.4
+
+  if (wouldClear) {
+    score += 180
+    if (isFourOfAKindClear(nextPile, resolved)) score += 100
+  } else if (top?.rank === rank && topRun >= 2) {
+    score -= 65
+  }
+
+  if (topRun === 3 && top?.rank === rank && cardCount > 0) {
+    score += 200
+  }
 
   const knownCounts = getRankCounts(getAllKnownCards(player))
   const totalRankCount = knownCounts.get(rank as Rank) ?? 0
   if (totalRankCount + state.activePile.filter((c) => c.rank === rank).length >= 4) {
-    score += 45
+    score += 55
   }
 
   if (progress > 0.65) {
-    score += rankValue * 2.5
+    score += rankValue * 2
   }
 
   return score
 }
 
-function pickBestPlayGroup(player: Player, state: GameState): CardPick[] | null {
+function listRankedPlayOptions(player: Player, state: GameState): PlayOption[] {
   const legal = listLegalPlays(player, state.activePile, state.turnRank)
-  if (legal.length === 0) return null
+  if (legal.length === 0) return []
 
-  const byRank = groupByRank(legal)
+  const knownLegal = legal.filter(({ pick }) => pick.zone !== 'faceDown')
+  const playable = knownLegal.length > 0 ? knownLegal : legal
 
-  const ranked = [...byRank.entries()]
-    .map(([rank, cards]) => ({
-      rank,
-      cards,
-      score: scorePlayableRank(state, player, rank, cards),
-    }))
-    .sort((a, b) => b.score - a.score)
+  const byRank = groupByRank(playable)
+  const options: PlayOption[] = []
 
-  return ranked[0]?.cards.map((x) => x.pick) ?? null
+  for (const [rank, cards] of byRank.entries()) {
+    const picks = buildPlayPicks(player, state, cards)
+    const resolved = resolveCardsFromPicks(player, picks)
+    if (resolved.length !== picks.length) continue
+    if (isBlockedPlay(player, state, picks)) continue
+
+    options.push({
+      picks,
+      cards: resolved,
+      score: scorePlayableRank(state, player, rank, cards, resolved),
+    })
+  }
+
+  return options.sort((a, b) => b.score - a.score)
+}
+
+function shouldPlayMoreMatchingCards(
+  player: Player,
+  state: GameState,
+  legal: { pick: CardPick; card: Card }[]
+): boolean {
+  if (state.turnRank === null || legal.length === 0) return true
+
+  const matching = legal.filter(({ card }) => card.rank === state.turnRank)
+  if (matching.length === 0) return false
+
+  const picks = buildPlayPicks(player, state, matching)
+  const resolved = resolveCardsFromPicks(player, picks)
+  const nextPile = [...state.activePile, ...resolved]
+  if (isClear(nextPile, resolved)) return true
+
+  const pilePoints = getPilePointValue(state.activePile)
+  if (pilePoints >= 28) return false
+
+  return resolved.length <= 2 || pilePoints < 18
+}
+
+function scoreFaceDownFlip(state: GameState, player: Player): number {
+  const pile = state.activePile
+  const pilePoints = getPilePointValue(pile)
+  const top = getTopCard(pile)
+  let score = 0
+
+  if (pile.length === 0) score += 100
+  if (pilePoints >= 40) score -= 85
+  if (top && !isSpecialClear(top)) score -= getRankValue(top.rank) * 6
+  if (getPlayerCardCount(player) <= 4) score += 40
+  if (player.hand.length === 0 && player.faceUp.filter(Boolean).length === 0) {
+    score += 35
+  }
+
+  return score
+}
+
+function shouldFlipFaceDown(player: Player, state: GameState): boolean {
+  if (getAvailableFaceDownIndices(player).length === 0) return false
+  return scoreFaceDownFlip(state, player) >= 0
+}
+
+function pickBestFaceDownIndex(player: Player, state: GameState): number {
+  const indices = getAvailableFaceDownIndices(player)
+  if (indices.length === 0) return -1
+  return indices[0]
 }
 
 function shouldPreferFaceDownOverOverplay(
@@ -183,8 +313,7 @@ function shouldPreferFaceDownOverOverplay(
   state: GameState,
   overplayPick: CardPick | null
 ): boolean {
-  const faceDownIdx = getAvailableFaceDownIndex(player)
-  if (faceDownIdx < 0) return false
+  if (!shouldFlipFaceDown(player, state)) return false
   if (!overplayPick) return true
 
   const overplayCard = getCardsFromPick(player, overplayPick)
@@ -274,53 +403,52 @@ function runAiTurnOnce(state: GameState, player: Player): AiStep | null {
   const playerId = player.id
   const legal = listLegalPlays(player, state.activePile, state.turnRank)
 
-  const picks = pickBestPlayGroup(player, state)
-  if (picks && picks.length > 0) {
-    const playedCards = resolveCardsFromPicks(player, picks)
-    let result = playCards(state, playerId, picks)
-
-    if (result?.blocked && picks.length > 1) {
-      const singlePick = [picks[0]]
-      const singleCards = resolveCardsFromPicks(player, singlePick)
-      const retry = playCards(state, playerId, singlePick)
-      if (retry && !retry.blocked) {
-        result = retry
-        playedCards.splice(0, playedCards.length, ...singleCards)
-      }
-    }
-
-    if (result) {
-      if (result.blocked) return null
-
-      if (result.cleared) {
-        return playResultStep(
-          result,
-          `${player.name} cleared the pile!`,
-          700,
-          playedCards
-        )
-      }
-
-      if (state.turnRank === null) {
-        return playResultStep(
-          result,
-          `${player.name} played ${playedCards.length} card(s).`,
-          700,
-          playedCards
-        )
-      }
-
-      return playResultStep(
-        result,
-        `${player.name} continued with ${playedCards.length} more.`,
-        600,
-        playedCards
-      )
+  if (
+    state.turnRank !== null &&
+    legal.length > 0 &&
+    !shouldPlayMoreMatchingCards(player, state, legal)
+  ) {
+    return {
+      state: endTurn(state, playerId),
+      message: `${player.name} ended their turn.`,
+      delayMs: 500,
     }
   }
 
+  for (const option of listRankedPlayOptions(player, state)) {
+    const result = playCards(state, playerId, option.picks)
+    if (!result || result.blocked) continue
+
+    if (result.cleared) {
+      return playResultStep(
+        result,
+        `${player.name} cleared the pile!`,
+        700,
+        option.cards
+      )
+    }
+
+    if (state.turnRank === null) {
+      return playResultStep(
+        result,
+        `${player.name} played ${option.cards.length} card(s).`,
+        700,
+        option.cards
+      )
+    }
+
+    return playResultStep(
+      result,
+      `${player.name} continued with ${option.cards.length} more.`,
+      600,
+      option.cards
+    )
+  }
+
   if (state.turnRank === null) {
-    const faceDownIdx = getAvailableFaceDownIndex(player)
+    const faceDownIdx = shouldFlipFaceDown(player, state)
+      ? pickBestFaceDownIndex(player, state)
+      : -1
     if (faceDownIdx >= 0) {
       const flippedCard = player.faceDown[faceDownIdx]
       const result = flipFaceDown(state, playerId, faceDownIdx)
