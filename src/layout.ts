@@ -15,6 +15,8 @@ export type LayoutSizes = {
   sideColumnWidth: number
   boardMaxWidth: number
   handGap: number
+  sideSeatGap: number
+  sideSeatPull: number
   isMobile: boolean
   isTouch: boolean
 }
@@ -69,6 +71,8 @@ export function computeLayout(
   const sideColumnWidth = isMobile
     ? snapPx(Math.max(48, Math.round(68 * scale)))
     : 96
+  const sideSeatGap = isMobile ? snapPx(2) : snapPx(4)
+  const sideSeatPull = isMobile ? snapPx(20) : snapPx(32)
 
   return {
     cardWidth,
@@ -85,6 +89,8 @@ export function computeLayout(
     sideColumnWidth,
     boardMaxWidth,
     handGap,
+    sideSeatGap,
+    sideSeatPull,
     isMobile,
     isTouch,
   }

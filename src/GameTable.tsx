@@ -1256,11 +1256,11 @@ export default function GameTable() {
             style={{
               display: 'grid',
               gridTemplateColumns: showLeft
-                ? 'minmax(0, 1fr) auto minmax(0, 1fr)'
+                ? 'auto auto auto'
                 : '1fr',
               gridTemplateRows: 'auto auto auto auto',
               rowGap: layout.isMobile ? 4 : 8,
-              columnGap: showLeft ? (layout.isMobile ? 4 : 8) : 0,
+              columnGap: showLeft ? layout.sideSeatGap : 0,
               alignItems: 'center',
               justifyItems: 'center',
               justifyContent: 'center',
@@ -1343,7 +1343,11 @@ export default function GameTable() {
             {showLeft && (
               <div
                 ref={leftAreaRef}
-                style={{ position: 'relative', justifySelf: 'end' }}
+                style={{
+                  position: 'relative',
+                  justifySelf: 'end',
+                  transform: `translateX(${layout.sideSeatPull}px)`,
+                }}
               >
                 <SeatBlock
                   player={left}
@@ -1353,7 +1357,7 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: layout.isMobile ? 6 : 10,
+                        gap: layout.isMobile ? 4 : 6,
                         alignItems: 'center',
                         position: 'relative',
                       }}
@@ -1455,7 +1459,11 @@ export default function GameTable() {
             {showRight && (
               <div
                 ref={rightAreaRef}
-                style={{ position: 'relative', justifySelf: 'start' }}
+                style={{
+                  position: 'relative',
+                  justifySelf: 'start',
+                  transform: `translateX(-${layout.sideSeatPull}px)`,
+                }}
               >
                 <SeatBlock
                   player={right}
@@ -1465,7 +1473,7 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: layout.isMobile ? 6 : 10,
+                        gap: layout.isMobile ? 4 : 6,
                         alignItems: 'center',
                         position: 'relative',
                       }}
