@@ -52,6 +52,7 @@ type CardFaceProps = {
   onClick?: () => void
   onDoubleClick?: () => void
   rotation?: number
+  rankScale?: number
 }
 
 function cornerFontSize(width: number, height: number, isSmall: boolean) {
@@ -75,6 +76,7 @@ export function CardFace({
   onClick,
   onDoubleClick,
   rotation = 0,
+  rankScale = 1,
 }: CardFaceProps) {
   const red = isRed(card)
   const textColor = red ? '#c0392b' : '#1a1a2e'
@@ -113,19 +115,23 @@ export function CardFace({
     ...gpuLayer,
   }
 
-  const centerRankSize = isSmallCard
-    ? 19
-    : isMediumCard
-      ? Math.max(30, Math.round(height * 0.31))
-      : Math.max(24, Math.round(height * 0.36))
+  const centerRankSize = Math.round(
+    (isSmallCard
+      ? 19
+      : isMediumCard
+        ? Math.max(30, Math.round(height * 0.31))
+        : Math.max(24, Math.round(height * 0.36))) * rankScale
+  )
 
-  const centerSuitSize = isSmallCard
-    ? 17
-    : isMediumCard
-      ? Math.max(30, Math.round(height * 0.24))
-      : Math.max(30, Math.round(height * 0.28))
+  const centerSuitSize = Math.round(
+    (isSmallCard
+      ? 17
+      : isMediumCard
+        ? Math.max(30, Math.round(height * 0.24))
+        : Math.max(30, Math.round(height * 0.28))) * rankScale
+  )
 
-  const cornerSize = cornerFontSize(width, height, isSmallCard)
+  const cornerSize = Math.round(cornerFontSize(width, height, isSmallCard) * rankScale)
 
   const cornerStyle: CSSProperties = {
     position: 'absolute',
@@ -141,13 +147,15 @@ export function CardFace({
   }
 
   if (isJokerCard) {
-    const jokerFontSize = isTinyCard
-      ? 7
-      : isSmallCard
-        ? 8
-        : isMediumCard
-          ? Math.max(11, Math.round(height * 0.23))
-          : Math.max(20, Math.round(height * 0.26))
+    const jokerFontSize = Math.round(
+      (isTinyCard
+        ? 7
+        : isSmallCard
+          ? 8
+          : isMediumCard
+            ? Math.max(11, Math.round(height * 0.23))
+            : Math.max(20, Math.round(height * 0.26))) * rankScale
+    )
 
     return (
       <div style={style} onClick={onClick} onDoubleClick={onDoubleClick}>

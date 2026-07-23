@@ -96,6 +96,7 @@ export function TableCards({
   const slotGap = spreadCards ? 6 : layout.tableSlotGap
   const isVertical = !isBottom && (display === 'left' || display === 'right')
   const rotation = isBottom ? 0 : cardFaceRotation(display)
+  const rankScale = isBottom ? 1 : 1.25
 
   const faceDownOffset =
     display === 'top'
@@ -230,6 +231,7 @@ export function TableCards({
                     width={w}
                     height={h}
                     rotation={rotation}
+                    rankScale={rankScale}
                   />
                 ) : (
                   <CardBack width={w} height={h} rotation={rotation} />
@@ -254,6 +256,7 @@ export function TableCards({
                   width={w}
                   height={h}
                   rotation={rotation}
+                  rankScale={rankScale}
                   onClick={() => onFaceUpClick?.(i)}
                   onDoubleClick={
                     isBottom && isPlayerTurn
