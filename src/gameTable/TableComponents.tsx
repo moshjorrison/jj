@@ -105,7 +105,7 @@ export function TableCards({
       : display === 'left'
         ? { top: 0, left: 0 }
         : display === 'right'
-          ? { top: 0, left: overlap }
+          ? { top: 0, left: 0 }
           : { top: 0, left: 0 }
 
   const faceUpOffset =
@@ -114,7 +114,7 @@ export function TableCards({
       : display === 'left'
         ? { top: 0, left: overlap }
         : display === 'right'
-          ? { top: 0, left: 0 }
+          ? { top: 0, left: overlap }
           : { top: overlap, left: 0 }
 
   const verticalCardStyle = isVertical
