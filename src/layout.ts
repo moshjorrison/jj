@@ -18,6 +18,7 @@ export type LayoutSizes = {
   boardMaxWidth: number
   handGap: number
   tableSlotGap: number
+  sideTableSlotGap: number
   tableCardOverlap: number
   sideHandTableGap: number
   sideSeatGap: number
@@ -47,6 +48,7 @@ export function computeLayout(
 
   const handGap = isMobile ? snapPx(2) : 4
   const tableSlotGap = isMobile ? snapPx(4) : snapPx(8)
+  const sideTableSlotGap = isMobile ? snapPx(1) : snapPx(3)
   const tableCardOverlap = isMobile ? snapPx(6) : snapPx(10)
   const sideHandTableGap = isMobile ? snapPx(4) : snapPx(6)
   const tableGap = tableSlotGap
@@ -106,6 +108,7 @@ export function computeLayout(
     boardMaxWidth,
     handGap,
     tableSlotGap,
+    sideTableSlotGap,
     tableCardOverlap,
     sideHandTableGap,
     sideSeatGap,

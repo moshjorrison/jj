@@ -93,8 +93,12 @@ export function TableCards({
   const w = isBottom ? layout.cardWidth : layout.opponentCardWidth
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight
   const overlap = spreadCards ? 0 : layout.tableCardOverlap
-  const slotGap = spreadCards ? 6 : layout.tableSlotGap
   const isVertical = !isBottom && (display === 'left' || display === 'right')
+  const slotGap = spreadCards
+    ? 6
+    : isVertical
+      ? layout.sideTableSlotGap
+      : layout.tableSlotGap
   const rotation = isBottom ? 0 : cardFaceRotation(display)
   const rankScale = isBottom ? 1 : 1.25
 
