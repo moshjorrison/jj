@@ -129,6 +129,11 @@ export function TableCards({
         gap: slotGap,
         alignItems: 'center',
         justifyContent: 'center',
+        ...(display === 'left'
+          ? { transform: `translateX(${layout.sideTablePull}px)` }
+          : display === 'right'
+            ? { transform: `translateX(-${layout.sideTablePull}px)` }
+            : {}),
       }}
     >
       {Array.from({ length: 4 }).map((_, i) => {
