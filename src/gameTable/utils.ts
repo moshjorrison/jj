@@ -63,6 +63,15 @@ export function cardsAddedToPile(prev: Card[], next: Card[]) {
   return added
 }
 
+export function cardsForPlayAnimation(
+  prevPile: Card[],
+  nextPile: Card[],
+  playedCards: Card[]
+) {
+  const added = cardsAddedToPile(prevPile, nextPile)
+  return added.length > 0 ? added : playedCards
+}
+
 export function roundPenaltyPoints(player: Player) {
   const allCards = [
     ...player.hand,

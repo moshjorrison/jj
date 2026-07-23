@@ -18,7 +18,7 @@ import type {
   RoundRevealState,
 } from './gameTable/types';
 import {
-  cardsAddedToPile,
+  cardsForPlayAnimation,
   flipFlyDurationMs,
   requiredContinuePlayerIds,
   resolveCardsFromPicks,
@@ -214,7 +214,7 @@ export default function GameTable() {
         }
       }
 
-      if (upper.includes('CLEAR')) {
+      if (/\bCLEAR!\b/.test(upper) || /\bCLEARED\b/.test(upper) || /\bCLEAR CARD\b/.test(upper)) {
         playSound('clear');
         showPileBanner('CLEAR!', 1300, 'clear');
         return;
@@ -345,6 +345,8 @@ export default function GameTable() {
 
   const finalizeResolvedResult = useCallback(
     (result: PlayLikeResult) => {
+      setPileBanner(null);
+
       const round = checkRoundEnd(result.state);
 
       if (round) {
@@ -422,6 +424,7 @@ export default function GameTable() {
 
       setPendingState(result.state);
       setSelectedKeys(new Set());
+      setPileBanner(null);
 
       const runFlyAnimation = () => {
         if (!boardRect || !pileRect || !fromRect || cards.length === 0) {
@@ -556,9 +559,10 @@ export default function GameTable() {
         return;
       }
 
-      const added = cardsAddedToPile(
+      const added = cardsForPlayAnimation(
         prevState.activePile,
-        step.state.activePile
+        step.state.activePile,
+        step.playedCards ?? []
       );
 
       if (added.length > 0) {
@@ -709,7 +713,11 @@ export default function GameTable() {
       const result = playCards(state, localPlayer.id, picks);
       if (!result || result.blocked) return;
 
-      const added = cardsAddedToPile(state.activePile, result.state.activePile);
+      const added = cardsForPlayAnimation(
+        state.activePile,
+        result.state.activePile,
+        playedCards
+      );
       const cardsToAnimate = added.length > 0 ? added : playedCards;
 
       if (cardsToAnimate.length > 0) {
@@ -1572,9 +1580,10 @@ export default function GameTable() {
                       if (!flippedCard) return;
                       const result = flipFaceDown(state, bottom.id, idx);
                       if (!result) return;
-                      const added = cardsAddedToPile(
+                      const added = cardsForPlayAnimation(
                         state.activePile,
-                        result.state.activePile
+                        result.state.activePile,
+                        [flippedCard]
                       );
                       const cardsToAnimate =
                         added.length > 0 ? added : [flippedCard];

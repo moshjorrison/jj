@@ -6,7 +6,7 @@ export type PileBannerVariant = 'default' | 'clear' | 'bad' | 'flip' | 'win' | '
 
 export function pileBannerVariant(text: string): PileBannerVariant {
   const upper = text.toUpperCase()
-  if (upper.includes('CLEAR')) return 'clear'
+  if (/\bCLEAR!\b/.test(upper) || /\bCLEARED\b/.test(upper)) return 'clear'
   if (upper.includes('BAD FLIP')) return 'bad'
   if (upper.includes('FLIP')) return 'flip'
   if (upper.includes('WIN')) return 'win'

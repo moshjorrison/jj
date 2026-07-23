@@ -10,13 +10,36 @@ import {
   flipFaceDown,
   playCards,
   playIntentionalOverplay,
+  type PlayResult,
 } from './gameState'
+import { resolveCardsFromPicks } from './gameTable/utils'
 import type { Card, CardPick, GameState, Player, Rank } from './types'
 
 export type AiStep = {
   state: GameState
   message: string
   delayMs?: number
+  cleared?: boolean
+  badFlip?: boolean
+  blocked?: boolean
+  playedCards?: Card[]
+}
+
+function playResultStep(
+  result: PlayResult,
+  message: string,
+  delayMs: number,
+  playedCards?: Card[]
+): AiStep {
+  return {
+    state: result.state,
+    message,
+    delayMs,
+    cleared: result.cleared,
+    badFlip: result.badFlip,
+    blocked: result.blocked,
+    playedCards,
+  }
 }
 
 function groupByRank<T extends { card: { rank: string } }>(items: T[]): Map<string, T[]> {
@@ -253,71 +276,96 @@ function runAiTurnOnce(state: GameState, player: Player): AiStep | null {
 
   const picks = pickBestPlayGroup(player, state)
   if (picks && picks.length > 0) {
-    const result = playCards(state, playerId, picks)
+    const playedCards = resolveCardsFromPicks(player, picks)
+    let result = playCards(state, playerId, picks)
+
+    if (result?.blocked && picks.length > 1) {
+      const singlePick = [picks[0]]
+      const singleCards = resolveCardsFromPicks(player, singlePick)
+      const retry = playCards(state, playerId, singlePick)
+      if (retry && !retry.blocked) {
+        result = retry
+        playedCards.splice(0, playedCards.length, ...singleCards)
+      }
+    }
+
     if (result) {
+      if (result.blocked) return null
+
       if (result.cleared) {
-        return {
-          state: result.state,
-          message: `${player.name} cleared the pile!`,
-          delayMs: 700,
-        }
+        return playResultStep(
+          result,
+          `${player.name} cleared the pile!`,
+          700,
+          playedCards
+        )
       }
 
       if (state.turnRank === null) {
-        return {
-          state: result.state,
-          message: `${player.name} played ${picks.length} card(s).`,
-          delayMs: 700,
-        }
+        return playResultStep(
+          result,
+          `${player.name} played ${playedCards.length} card(s).`,
+          700,
+          playedCards
+        )
       }
 
-      return {
-        state: result.state,
-        message: `${player.name} continued with ${picks.length} more.`,
-        delayMs: 600,
-      }
+      return playResultStep(
+        result,
+        `${player.name} continued with ${playedCards.length} more.`,
+        600,
+        playedCards
+      )
     }
   }
 
   if (state.turnRank === null) {
     const faceDownIdx = getAvailableFaceDownIndex(player)
     if (faceDownIdx >= 0) {
+      const flippedCard = player.faceDown[faceDownIdx]
       const result = flipFaceDown(state, playerId, faceDownIdx)
       if (result) {
+        const playedCards = flippedCard ? [flippedCard] : undefined
+
         if (result.badFlip) {
-          return {
-            state: result.state,
-            message: `${player.name} flipped too high and picked up the pile.`,
-            delayMs: 950,
-          }
+          return playResultStep(
+            result,
+            `${player.name} flipped too high and picked up the pile.`,
+            950,
+            playedCards
+          )
         }
 
         if (result.cleared) {
-          return {
-            state: result.state,
-            message: `${player.name} flipped a clear card!`,
-            delayMs: 950,
-          }
+          return playResultStep(
+            result,
+            `${player.name} flipped a clear card!`,
+            950,
+            playedCards
+          )
         }
 
-        return {
-          state: result.state,
-          message: `${player.name} flipped a face-down card.`,
-          delayMs: 950,
-        }
+        return playResultStep(
+          result,
+          `${player.name} flipped a face-down card.`,
+          950,
+          playedCards
+        )
       }
     }
 
     const overplayPick = pickBestOverplay(player, state)
     const mustOverplay = legal.length === 0 && !!overplayPick
     if (overplayPick && (mustOverplay || shouldOverplay(player, state, overplayPick))) {
+      const overplayCard = getCardsFromPick(player, overplayPick)
       const result = playIntentionalOverplay(state, playerId, overplayPick)
       if (result) {
-        return {
-          state: result.state,
-          message: result.message,
-          delayMs: 800,
-        }
+        return playResultStep(
+          result,
+          result.message,
+          800,
+          overplayCard ? [overplayCard] : undefined
+        )
       }
     }
 
