@@ -97,25 +97,28 @@ export function TableCards({
   const slotGap = spreadCards ? 6 : layout.tableSlotGap
   const rotation = isBottom ? 0 : cardFaceRotation(display)
   const rankScale = isBottom ? 1 : 1.25
-  const stackedAlongMain = w + overlap
   const stackedAlongCross = h + overlap
 
   const faceDownOffset =
-    display === 'top' || display === 'left'
+    display === 'top'
       ? { top: overlap, left: 0 }
-      : display === 'right'
+      : display === 'left'
         ? { top: 0, left: 0 }
-        : { top: 0, left: 0 }
+        : display === 'right'
+          ? { top: 0, left: overlap }
+          : { top: 0, left: 0 }
 
   const faceUpOffset =
-    display === 'top' || display === 'left'
+    display === 'top'
       ? { top: 0, left: 0 }
-      : display === 'right'
-        ? { top: overlap, left: 0 }
-        : { top: overlap, left: 0 }
+      : display === 'left'
+        ? { top: 0, left: overlap }
+        : display === 'right'
+          ? { top: 0, left: 0 }
+          : { top: overlap, left: 0 }
 
   const verticalCardStyle = isVertical
-    ? ({ left: '50%', transform: 'translateX(-50%)' } as const)
+    ? ({ top: '50%', transform: 'translateY(-50%)' } as const)
     : {}
 
   return (
@@ -126,11 +129,6 @@ export function TableCards({
         gap: slotGap,
         alignItems: 'center',
         justifyContent: 'center',
-        ...(display === 'left'
-          ? { transform: `translateX(${layout.sideTablePull}px)` }
-          : display === 'right'
-            ? { transform: `translateX(-${layout.sideTablePull}px)` }
-            : {}),
       }}
     >
       {Array.from({ length: 4 }).map((_, i) => {
@@ -143,7 +141,11 @@ export function TableCards({
         const hasStackedPair = hasFaceUp && hasFaceDown
 
         const slotWidth = isVertical
-          ? h
+          ? spreadCards && hasStackedPair
+            ? h * 2 + slotGap
+            : hasStackedPair
+              ? stackedAlongCross
+              : h
           : spreadCards && hasStackedPair
             ? w * 2 + slotGap
             : w
@@ -151,9 +153,7 @@ export function TableCards({
         const slotHeight = isVertical
           ? spreadCards && hasStackedPair
             ? w * 2 + slotGap
-            : hasStackedPair
-              ? stackedAlongMain
-              : w
+            : w
           : spreadCards && hasStackedPair
             ? h
             : hasStackedPair

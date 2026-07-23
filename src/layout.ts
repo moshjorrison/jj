@@ -48,7 +48,7 @@ export function computeLayout(
   const handGap = isMobile ? snapPx(2) : 4
   const tableSlotGap = isMobile ? snapPx(4) : snapPx(8)
   const tableCardOverlap = isMobile ? snapPx(6) : snapPx(10)
-  const sideHandTableGap = isMobile ? snapPx(4) : snapPx(6)
+  const sideHandTableGap = isMobile ? snapPx(0) : snapPx(0)
   const tableGap = tableSlotGap
 
   const pileCardWidth = isMobile
