@@ -11,6 +11,10 @@ import { computeLayout, type LayoutSizes } from './layout'
 const LayoutContext = createContext<LayoutSizes | null>(null)
 
 function getViewportWidth() {
+  // innerWidth stays stable when Safari's URL bar shows/hides; visualViewport jitters.
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    return window.innerWidth
+  }
   return window.visualViewport?.width ?? window.innerWidth
 }
 

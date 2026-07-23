@@ -27,12 +27,12 @@ export function OpponentHand({
   const cardH = layout.opponentCardHeight
   const step = isVertical ? layout.rightHandStep : layout.opponentHandStep
   const spreadGap = 3
-  const maxSize = spreadCards ? 2000 : 300
+  const maxSize = spreadCards ? 2000 : layout.isMobile && isVertical ? 0 : 300
   const spreadStep = isVertical ? cardH + spreadGap : cardW + spreadGap
   const actualStep =
     spreadCards && count > 0
       ? spreadStep
-      : count > 1
+      : count > 1 && maxSize > 0
         ? Math.min(step, (maxSize - (isVertical ? cardH : cardW)) / (count - 1))
         : step
 
@@ -92,8 +92,8 @@ export function TableCards({
   const layout = useLayout()
   const w = isBottom ? layout.cardWidth : layout.opponentCardWidth
   const h = isBottom ? layout.cardHeight : layout.opponentCardHeight
-  const overlap = spreadCards ? 0 : isBottom && layout.isMobile ? 6 : 10
-  const slotGap = spreadCards ? 6 : isBottom ? (layout.isMobile ? 4 : 12) : 8
+  const overlap = spreadCards ? 0 : layout.tableCardOverlap
+  const slotGap = spreadCards ? 6 : layout.tableSlotGap
   const isVertical = !isBottom && (display === 'left' || display === 'right')
   const rotation = isBottom ? 0 : cardFaceRotation(display)
 

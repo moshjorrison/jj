@@ -1015,8 +1015,9 @@ export default function GameTable() {
       style={{
         minHeight: '100dvh',
         color: 'white',
-        padding:
-          'max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(max(6px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(6px, env(safe-area-inset-left))',
+        padding: layout.isMobile
+          ? 'max(6px, env(safe-area-inset-top)) max(2px, env(safe-area-inset-right)) max(max(6px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(2px, env(safe-area-inset-left))'
+          : 'max(6px, env(safe-area-inset-top)) max(6px, env(safe-area-inset-right)) max(max(6px, env(safe-area-inset-bottom)), env(keyboard-inset-height, 0px)) max(6px, env(safe-area-inset-left))',
         fontFamily:
           '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif',
         overflowX: 'hidden',
@@ -1259,13 +1260,16 @@ export default function GameTable() {
             style={{
               display: 'grid',
               gridTemplateColumns: showLeft
-                ? 'auto auto auto'
+                ? layout.isMobile
+                  ? 'minmax(0, 1fr) auto minmax(0, 1fr)'
+                  : 'auto auto auto'
                 : '1fr',
               gridTemplateRows: 'auto auto auto auto',
               rowGap: layout.isMobile ? 4 : 8,
               columnGap: showLeft ? layout.sideSeatGap : 0,
               alignItems: 'center',
-              justifyItems: 'center',
+              justifyItems:
+                layout.isMobile && showLeft ? 'stretch' : 'center',
               justifyContent: 'center',
               width: '100%',
             }}
@@ -1348,8 +1352,11 @@ export default function GameTable() {
                 ref={leftAreaRef}
                 style={{
                   position: 'relative',
-                  justifySelf: 'end',
-                  transform: `translateX(${layout.sideSeatPull}px)`,
+                  justifySelf: layout.isMobile ? 'start' : 'end',
+                  width: layout.isMobile ? '100%' : undefined,
+                  transform: layout.isMobile
+                    ? undefined
+                    : `translateX(${layout.sideSeatPull}px)`,
                 }}
               >
                 <SeatBlock
@@ -1360,8 +1367,10 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: layout.isMobile ? 4 : 6,
+                        gap: layout.sideHandTableGap,
                         alignItems: 'center',
+                        justifyContent: layout.isMobile ? 'flex-start' : undefined,
+                        width: layout.isMobile ? '100%' : undefined,
                         position: 'relative',
                       }}
                     >
@@ -1464,8 +1473,11 @@ export default function GameTable() {
                 ref={rightAreaRef}
                 style={{
                   position: 'relative',
-                  justifySelf: 'start',
-                  transform: `translateX(-${layout.sideSeatPull}px)`,
+                  justifySelf: layout.isMobile ? 'end' : 'start',
+                  width: layout.isMobile ? '100%' : undefined,
+                  transform: layout.isMobile
+                    ? undefined
+                    : `translateX(-${layout.sideSeatPull}px)`,
                 }}
               >
                 <SeatBlock
@@ -1476,8 +1488,10 @@ export default function GameTable() {
                     <div
                       style={{
                         display: 'flex',
-                        gap: layout.isMobile ? 4 : 6,
+                        gap: layout.sideHandTableGap,
                         alignItems: 'center',
+                        justifyContent: layout.isMobile ? 'flex-end' : undefined,
+                        width: layout.isMobile ? '100%' : undefined,
                         position: 'relative',
                       }}
                     >

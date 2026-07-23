@@ -17,6 +17,9 @@ export type LayoutSizes = {
   sideColumnWidth: number
   boardMaxWidth: number
   handGap: number
+  tableSlotGap: number
+  tableCardOverlap: number
+  sideHandTableGap: number
   sideSeatGap: number
   sideSeatPull: number
   sideTablePull: number
@@ -43,7 +46,10 @@ export function computeLayout(
     : 1
 
   const handGap = isMobile ? snapPx(2) : 4
-  const tableGap = isMobile ? snapPx(4) : 12
+  const tableSlotGap = isMobile ? snapPx(4) : snapPx(8)
+  const tableCardOverlap = isMobile ? snapPx(6) : snapPx(10)
+  const sideHandTableGap = isMobile ? snapPx(4) : snapPx(6)
+  const tableGap = tableSlotGap
 
   const pileCardWidth = isMobile
     ? snapPx(
@@ -78,7 +84,7 @@ export function computeLayout(
   const sideColumnWidth = isMobile
     ? snapPx(Math.max(48, Math.round(68 * scale)))
     : 96
-  const sideSeatGap = isMobile ? snapPx(2) : snapPx(4)
+  const sideSeatGap = isMobile ? snapPx(0) : snapPx(4)
   const sideSeatPull = isMobile ? snapPx(20) : snapPx(32)
   const sideTablePull = isMobile ? snapPx(16) : snapPx(24)
 
@@ -99,6 +105,9 @@ export function computeLayout(
     sideColumnWidth,
     boardMaxWidth,
     handGap,
+    tableSlotGap,
+    tableCardOverlap,
+    sideHandTableGap,
     sideSeatGap,
     sideSeatPull,
     sideTablePull,
