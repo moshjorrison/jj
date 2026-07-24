@@ -194,4 +194,74 @@ describe('gameState', () => {
     expect(round!.state.lastRoundDeltas?.find((d) => d.playerId === loser.id)?.delta).toBe(5)
     expect(round!.state.players.find((p) => p.id === loser.id)?.score).toBe(5)
   })
+
+  it('allows play after round 2 opens with King on pile', () => {
+    let state = startGame(2, 'online')
+    const opener = state.players.find((p) => p.id === state.currentPlayerId)!
+    const responder = state.players.find((p) => p.id !== opener.id)!
+
+    state = {
+      ...state,
+      players: state.players.map((p) =>
+        p.id === opener.id
+          ? { ...p, hand: [], faceUp: [], faceDown: [] }
+          : { ...p, hand: [card('5')], faceUp: [], faceDown: [] }
+      ),
+    }
+    const round = checkRoundEnd(state)
+    expect(round).not.toBeNull()
+    state = round!.state
+
+    const king = card('K', 'hearts', 99)
+    state = {
+      ...state,
+      players: state.players.map((p) =>
+        p.id === opener.id ? { ...p, hand: [king] } : p
+      ),
+    }
+
+    const openPlay = playCards(state, opener.id, [{ zone: 'hand', index: 0 }])
+    expect(openPlay).not.toBeNull()
+    state = openPlay!.state
+    expect(state.turnRank).toBe('K')
+    expect(state.formTurnUsed).toBe(true)
+
+    state = endTurn(state, opener.id)
+    expect(state.currentPlayerId).toBe(responder.id)
+    expect(state.turnRank).toBeNull()
+    expect(state.formTurnUsed).toBe(false)
+    expect(state.activePile).toHaveLength(1)
+
+    const responderKing = card('K', 'spades', 100)
+    state = {
+      ...state,
+      players: state.players.map((p) =>
+        p.id === responder.id ? { ...p, hand: [responderKing] } : p
+      ),
+    }
+
+    const response = playCards(state, responder.id, [{ zone: 'hand', index: 0 }])
+    expect(response).not.toBeNull()
+    expect(response!.blocked).toBeFalsy()
+    expect(response!.state.activePile).toHaveLength(2)
+  })
+
+  it('ignores stale turnRank when formTurnUsed is false', () => {
+    let state = startGame(2, 'online')
+    const current = state.players.find((p) => p.id === state.currentPlayerId)!
+    const queen = card('Q', 'hearts', 50)
+    state = {
+      ...state,
+      players: state.players.map((p) =>
+        p.id === current.id ? { ...p, hand: [queen] } : p
+      ),
+      activePile: [card('K', 'spades', 51)],
+      turnRank: 'K',
+      formTurnUsed: false,
+    }
+
+    const result = playCards(state, current.id, [{ zone: 'hand', index: 0 }])
+    expect(result).not.toBeNull()
+    expect(result!.blocked).toBeFalsy()
+  })
 })

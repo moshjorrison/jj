@@ -283,7 +283,7 @@ function validatePicksForCurrentTurn(
   const playRank = cards[0].rank
   if (!cards.every((c) => c.rank === playRank)) return null
 
-  if (state.turnRank !== null) {
+  if (state.turnRank !== null && state.formTurnUsed) {
     const firstPick = picks[0]
     if (firstPick.zone === 'faceDown') return null
     if (picks.some((p) => p.zone === 'faceDown')) return null
