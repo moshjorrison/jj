@@ -7,8 +7,10 @@ import {
 import type { OnlineSession } from './useOnlineGame'
 import { getWsUrl } from './wsUrl'
 import { WinScoreField } from '../WinScoreField'
+import { PlayerCountField } from '../PlayerCountField'
 import { DEFAULT_WIN_SCORE } from '../winScore'
-import { MAX_ONLINE_PLAYERS, MIN_ONLINE_PLAYERS } from '../constants'
+import { DEFAULT_PLAYER_COUNT } from '../playerCount'
+import { MIN_ONLINE_PLAYERS } from '../constants'
 
 type OnlineLobbyProps = {
   session: OnlineSession
@@ -76,7 +78,7 @@ async function shareInvite(url: string, roomCode: string) {
 export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
   const [name, setName] = useState(() => getStoredPlayerName())
   const [joinCode, setJoinCode] = useState(session.roomCode ?? '')
-  const [playerCount, setPlayerCount] = useState(4)
+  const [playerCount, setPlayerCount] = useState(DEFAULT_PLAYER_COUNT)
   const [winScore, setWinScore] = useState(DEFAULT_WIN_SCORE)
   const [mode, setMode] = useState<'create' | 'join'>(
     session.roomCode ? 'join' : 'create'
@@ -239,24 +241,10 @@ export function OnlineLobby({ session, onBack }: OnlineLobbyProps) {
 
             {mode === 'create' ? (
               <>
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
-                  Max players ({MIN_ONLINE_PLAYERS}–{MAX_ONLINE_PLAYERS})
-                </label>
-                <input
-                  type="number"
-                  min={MIN_ONLINE_PLAYERS}
-                  max={MAX_ONLINE_PLAYERS}
+                <PlayerCountField
                   value={playerCount}
-                  onChange={(e) => {
-                    const next = Number(e.target.value)
-                    if (Number.isNaN(next)) return
-                    setPlayerCount(
-                      Math.min(
-                        MAX_ONLINE_PLAYERS,
-                        Math.max(MIN_ONLINE_PLAYERS, next)
-                      )
-                    )
-                  }}
+                  onChange={setPlayerCount}
+                  label="Max players"
                   style={fieldStyle}
                 />
                 <WinScoreField

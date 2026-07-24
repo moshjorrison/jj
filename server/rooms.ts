@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
 import { runAutoPlayForPlayer } from '../src/ai.js'
+import { normalizePlayerCount } from '../src/playerCount.js'
 import { DEFAULT_WIN_SCORE, normalizeWinScore } from '../src/winScore.js'
 import {
   DISCONNECT_AUTO_PLAY_MS,
-  MAX_ONLINE_PLAYERS,
   MIN_ONLINE_PLAYERS,
   ONLINE_TURN_TIMER_MS,
 } from '../src/constants.js'
@@ -345,10 +345,7 @@ export function handleClientMessage(
   message: ClientMessage
 ) {
   if (message.type === 'create') {
-    const count = Math.min(
-      MAX_ONLINE_PLAYERS,
-      Math.max(MIN_ONLINE_PLAYERS, message.playerCount)
-    )
+    const count = normalizePlayerCount(message.playerCount)
     const winScore = normalizeWinScore(message.winScore ?? DEFAULT_WIN_SCORE)
     const name = message.name.trim() || 'Host'
     const code = makeCode()

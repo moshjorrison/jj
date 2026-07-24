@@ -59,6 +59,7 @@ import { useLayout } from './LayoutContext';
 import { OnlineLobby } from './multiplayer/OnlineLobby';
 import { useOnlineGame } from './multiplayer/useOnlineGame';
 import { DEFAULT_WIN_SCORE } from './winScore';
+import { DEFAULT_PLAYER_COUNT } from './playerCount';
 import { GameOverScreen } from './GameOverScreen';
 import { HotSeatBanner } from './HotSeatBanner';
 import { SetupScreen } from './SetupScreen';
@@ -97,11 +98,11 @@ export default function GameTable() {
   const [showOnlineLobby, setShowOnlineLobby] = useState(
     () => !!new URLSearchParams(window.location.search).get('room')
   );
-  const [setupCount, setSetupCount] = useState(4);
+  const [setupCount, setSetupCount] = useState(DEFAULT_PLAYER_COUNT);
   const [setupWinScore, setSetupWinScore] = useState(DEFAULT_WIN_SCORE);
   const [setupMode, setSetupMode] = useState<GameMode>('ai');
   const [setupNames, setSetupNames] = useState(() => {
-    const names = defaultPlayerNames(4);
+    const names = defaultPlayerNames(DEFAULT_PLAYER_COUNT);
     const stored = getStoredPlayerName();
     if (stored) names[0] = stored;
     return names;
@@ -154,18 +155,34 @@ export default function GameTable() {
     state.currentPlayerId === localPlayer.id &&
     state.phase === 'playing';
 
+  // Online round review is driven by the server roundEnd flag. If local
+  // roundReveal state outlives that (e.g. missed sync), don't block play.
+  const showRoundReveal =
+    roundReveal !== null &&
+    (mode !== 'online' || online.roundEnd !== null);
+
+  const activeTurnRank = state.formTurnUsed ? state.turnRank : null;
+
   const isAnimating =
     flyingCards.length > 0 ||
     pendingState !== null ||
-    roundReveal !== null;
+    showRoundReveal;
 
   useEffect(() => {
-    if (state.phase !== 'playing' || roundReveal) return;
+    if (state.phase !== 'playing' || showRoundReveal) return;
     const id = state.currentPlayerId;
     if (prevTurnPlayerRef.current === id) return;
     prevTurnPlayerRef.current = id;
     if (localPlayer && id === localPlayer.id) playSound('turn');
-  }, [state.currentPlayerId, state.phase, localPlayer, roundReveal]);
+  }, [state.currentPlayerId, state.phase, localPlayer, showRoundReveal]);
+
+  useEffect(() => {
+    if (mode !== 'online' || online.roundEnd) return;
+    if (!roundReveal) return;
+    setRoundReveal(null);
+    roundRevealTimersRef.current.forEach((t) => window.clearTimeout(t));
+    roundRevealTimersRef.current = [];
+  }, [mode, online.roundEnd, roundReveal]);
 
   const getSeatRef = useCallback((seat: Seat) => {
     if (seat === 'bottom') return bottomAreaRef;
@@ -510,6 +527,8 @@ export default function GameTable() {
     setPendingState(null);
     setRoundReveal(null);
     onlineRoundEndKeyRef.current = null;
+    roundRevealTimersRef.current.forEach((t) => window.clearTimeout(t));
+    roundRevealTimersRef.current = [];
     setShowOnlineLobby(false);
   }, [online.gameState, online.message, online.roundEnd, setupMode]);
 
@@ -614,7 +633,7 @@ export default function GameTable() {
           .filter((c): c is Card => !!c);
 
         const lockedRank =
-          state.turnRank ??
+          activeTurnRank ??
           (existingCards.length > 0 ? existingCards[0].rank : null);
 
         if (lockedRank && card.rank !== lockedRank) {
@@ -627,7 +646,7 @@ export default function GameTable() {
         );
         const addingFaceDown = pick.zone === 'faceDown';
 
-        if (state.turnRank !== null && addingFaceDown) {
+        if (activeTurnRank !== null && addingFaceDown) {
           setMessage(
             'You cannot add a face-down card after a play has started.'
           );
@@ -644,7 +663,7 @@ export default function GameTable() {
           return prev;
         }
 
-        if (state.turnRank === null && existingCards.length === 0) {
+        if (activeTurnRank === null && existingCards.length === 0) {
           if (
             pick.zone !== 'faceDown' &&
             !canPlay(card, state.activePile) &&
@@ -659,7 +678,7 @@ export default function GameTable() {
         return next;
       });
     },
-    [localPlayer, isLocalTurn, state.activePile, state.turnRank, isAnimating]
+    [localPlayer, isLocalTurn, state.activePile, activeTurnRank, isAnimating]
   );
 
   const selectedPicks = useMemo(
@@ -678,7 +697,7 @@ export default function GameTable() {
       isAnimating
     )
       return false;
-    if (state.turnRank !== null) return false;
+    if (activeTurnRank !== null) return false;
 
     const pick = selectedPicks[0];
     if (pick.zone === 'faceDown') return false;
@@ -922,7 +941,7 @@ export default function GameTable() {
       : playerAtDisplay(tablePlayers, 'bottom', viewSeat, state.playerCount) ??
         tablePlayers[0];
   const showTable =
-    state.phase === 'playing' || state.phase === 'finished' || !!roundReveal
+    state.phase === 'playing' || state.phase === 'finished' || showRoundReveal
 
   const mobileBottomSpan =
     layout.isMobile && showLeft
@@ -978,22 +997,28 @@ export default function GameTable() {
   const leftReveal = getRevealFlags(left);
   const rightReveal = getRevealFlags(right);
   const bottomReveal = getRevealFlags(bottom);
-  const spreadRoundCards = !!roundReveal;
+  const spreadRoundCards = !!showRoundReveal;
 
-  const roundContinueCount = roundReveal
-    ? roundReveal.continuedPlayerIds.length
+  const roundContinueCount = showRoundReveal
+    ? roundReveal!.continuedPlayerIds.length
     : 0;
-  const roundContinueRequired = roundReveal?.requiredPlayerIds.length ?? 0;
-  const nextContinuePlayerId = roundReveal?.requiredPlayerIds.find(
-    (id) => !roundReveal.continuedPlayerIds.includes(id)
-  );
+  const roundContinueRequired = showRoundReveal
+    ? roundReveal!.requiredPlayerIds.length
+    : 0;
+  const nextContinuePlayerId = showRoundReveal
+    ? roundReveal!.requiredPlayerIds.find(
+        (id) => !roundReveal!.continuedPlayerIds.includes(id)
+      )
+    : undefined;
   const nextContinuePlayer = nextContinuePlayerId
     ? state.players.find((p) => p.id === nextContinuePlayerId)
     : null;
   const localHasContinued =
     !!localPlayer &&
+    !!showRoundReveal &&
     !!roundReveal?.continuedPlayerIds.includes(localPlayer.id);
   const canPressContinue =
+    !!showRoundReveal &&
     !!roundReveal?.revealComplete &&
     (mode === 'online'
       ? !!localPlayer && !localHasContinued
@@ -1012,7 +1037,7 @@ export default function GameTable() {
           )
         : 'CONTINUE';
 
-  const actionHint = actionHintForTurn(state, isLocalTurn, !!roundReveal);
+  const actionHint = actionHintForTurn(state, isLocalTurn, showRoundReveal);
   const turnChipLabel =
     currentPlayer && isLocalTurn
       ? 'Your turn'
@@ -1113,7 +1138,7 @@ export default function GameTable() {
           />
         )}
 
-      {state.phase === 'finished' && !roundReveal && (
+      {state.phase === 'finished' && !showRoundReveal && (
         <GameOverScreen
           players={state.players}
           winScore={state.winScore}
@@ -1200,22 +1225,22 @@ export default function GameTable() {
             <button
               type="button"
               onClick={handleNewGame}
-            disabled={isAnimating && !roundReveal?.revealComplete}
+            disabled={isAnimating && !showRoundReveal}
             style={{
               padding: '8px 16px',
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.18)',
               background:
-                isAnimating && !roundReveal?.revealComplete
+                isAnimating && !showRoundReveal
                   ? 'rgba(255,255,255,0.05)'
                   : 'rgba(255,255,255,0.08)',
               color:
-                isAnimating && !roundReveal?.revealComplete
+                isAnimating && !showRoundReveal
                   ? 'rgba(255,255,255,0.45)'
                   : 'white',
               fontWeight: 700,
               cursor:
-                isAnimating && !roundReveal?.revealComplete
+                isAnimating && !showRoundReveal
                   ? 'default'
                   : 'pointer',
             }}
@@ -1238,12 +1263,12 @@ export default function GameTable() {
           >
             <ScorePanel
               compact
-              players={roundReveal?.pendingFinalState.players ?? state.players}
+              players={showRoundReveal ? roundReveal!.pendingFinalState.players : state.players}
               currentId={localPlayer?.id ?? state.currentPlayerId}
               disconnectedIds={disconnectedIds}
             />
             {state.phase === 'playing' &&
-              !roundReveal &&
+              !showRoundReveal &&
               currentPlayer &&
               mode !== 'ai' && (
               <div
@@ -1303,7 +1328,7 @@ export default function GameTable() {
                 position: 'relative',
               }}
             >
-              {state.lastRoundDeltas && !roundReveal && (
+              {state.lastRoundDeltas && !showRoundReveal && (
                 <RoundScoreRecap
                   players={state.players}
                   deltas={state.lastRoundDeltas}
@@ -1322,7 +1347,7 @@ export default function GameTable() {
               ) : (
               <SeatBlock
                 player={top}
-                isActiveTurn={top?.id === state.currentPlayerId && !roundReveal}
+                isActiveTurn={top?.id === state.currentPlayerId && !showRoundReveal}
               >
                 {top && (
                   <div
@@ -1378,7 +1403,7 @@ export default function GameTable() {
               >
                 <SeatBlock
                   player={left}
-                  isActiveTurn={left?.id === state.currentPlayerId && !roundReveal}
+                  isActiveTurn={left?.id === state.currentPlayerId && !showRoundReveal}
                 >
                   {left && (
                     <div
@@ -1451,12 +1476,12 @@ export default function GameTable() {
                 )}
               </div>
 
-              {roundReveal ? (
+              {showRoundReveal ? (
                 <MessageBar
-                  message={roundReveal.roundMessage}
+                  message={roundReveal!.roundMessage}
                   maxWidth={layout.bottomTableWidth}
                   hint={
-                    !roundReveal.revealComplete
+                    !roundReveal!.revealComplete
                       ? reviewingLeftoverCardsHint()
                       : 'Everyone must continue before the next deal.'
                   }
@@ -1469,7 +1494,7 @@ export default function GameTable() {
                 />
               )}
 
-              {roundReveal && (
+              {showRoundReveal && (
                 <button
                   type="button"
                   disabled={!canPressContinue}
@@ -1499,7 +1524,7 @@ export default function GameTable() {
               >
                 <SeatBlock
                   player={right}
-                  isActiveTurn={right?.id === state.currentPlayerId && !roundReveal}
+                  isActiveTurn={right?.id === state.currentPlayerId && !showRoundReveal}
                 >
                   {right && (
                     <div
@@ -1544,7 +1569,7 @@ export default function GameTable() {
             <div ref={bottomAreaRef} style={{ position: 'relative', ...mobileBottomSpan }}>
               <SeatBlock
                 player={bottom}
-                isActiveTurn={bottom?.id === state.currentPlayerId && !roundReveal}
+                isActiveTurn={bottom?.id === state.currentPlayerId && !showRoundReveal}
               >
                 <div
                   style={{
@@ -1639,8 +1664,8 @@ export default function GameTable() {
                                 selected={selectedKeys.has(key)}
                                 faded={
                                   !isLocalTurn ||
-                                  (state.turnRank !== null &&
-                                    card.rank !== state.turnRank)
+                                  (activeTurnRank !== null &&
+                                    card.rank !== activeTurnRank)
                                 }
                                 onClick={() => {
                                   if (isAnimating) return;
@@ -1665,7 +1690,7 @@ export default function GameTable() {
                     />
                   )}
 
-                  {!roundReveal && (
+                  {!showRoundReveal && (
                     <div
                       style={{
                         display: 'flex',

@@ -5,6 +5,7 @@ import { defaultPlayerNames } from './seats'
 import { rulesSections } from './rulesContent'
 
 import { WinScoreField } from './WinScoreField'
+import { PlayerCountField } from './PlayerCountField'
 
 type SetupScreenProps = {
   playerCount: number
@@ -90,7 +91,7 @@ export function SetupScreen({
       >
         <h1 style={{ margin: '0 0 8px', fontSize: 28 }}>J&amp;J</h1>
         <p style={{ margin: '0 0 20px', opacity: 0.85, lineHeight: 1.5 }}>
-          2–4 players, two decks. Pick how you want to play.
+          2–10 players, two decks. Pick how you want to play.
         </p>
 
         <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
@@ -135,20 +136,21 @@ export function SetupScreen({
               : 'Play with friends on separate phones or computers. Create a room and share the invite link.'}
         </p>
 
-        <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
-          Players
-        </label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          {[2, 3, 4].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onPlayerCountChange(n)}
-              style={modeBtn(playerCount === n)}
-            >
-              {n}
-            </button>
-          ))}
+        <div style={{ marginBottom: 16 }}>
+          <PlayerCountField
+            value={playerCount}
+            onChange={onPlayerCountChange}
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: '10px 12px',
+              borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.25)',
+              background: 'rgba(0,0,0,0.2)',
+              color: 'white',
+              fontSize: 16,
+            }}
+          />
         </div>
 
         {gameMode !== 'online' && (
